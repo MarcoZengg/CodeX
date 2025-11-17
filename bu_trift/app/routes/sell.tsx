@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import type { FormEvent } from "react";
 import type { Route } from "./+types/sell";
 import { Item } from "@/entities";
+import type { Item as ItemType } from "@/entities/Item";
 import { useNavigate } from "react-router";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -115,11 +116,26 @@ export default function Sell() {
     setIsSubmitting(true);
 
     try {
-      await Item.create({
-        ...formData,
+      // Validate required fields
+      if (!formData.category || !formData.condition) {
+        alert("Please select both category and condition");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Prepare data for backend - only include required fields and valid values
+      const itemData = {
+        title: formData.title,
+        description: formData.description,
         price: parseFloat(formData.price),
-        seller_id: "current_user" // This will be automatically set to current user
-      });
+        category: formData.category,
+        condition: formData.condition,
+        seller_id: "current_user",
+        location: formData.location || undefined,
+        is_negotiable: formData.is_negotiable,
+      };
+
+      await Item.create(itemData);
 
       navigate(createPageUrl("Home"));
     } catch (error) {

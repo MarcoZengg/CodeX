@@ -223,19 +223,41 @@ export class ItemEntity {
 
   static async create(data: Partial<Item>): Promise<Item> {
     try {
+      // Prepare request body - remove undefined fields and null values for optional fields
+      const requestBody: any = {
+        title: data.title,
+        description: data.description,
+        price: data.price,
+        category: data.category,
+        condition: data.condition,
+        seller_id: data.seller_id,
+      };
+
+      // Only include optional fields if they have values (send null to backend for empty strings)
+      if (data.location !== undefined && data.location !== null && data.location !== '') {
+        requestBody.location = data.location;
+      } else {
+        requestBody.location = null;  // Send null to backend for optional field
+      }
+      if (data.is_negotiable !== undefined) {
+        requestBody.is_negotiable = data.is_negotiable;
+      }
+
       // Call FastAPI backend endpoint
       const response = await fetch('http://localhost:8000/api/items', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
         // Get error message from backend if available
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `Failed to create item: ${response.statusText}`);
+        const errorMessage = errorData.detail || errorData.message || `Failed to create item: ${response.statusText}`;
+        console.error('Backend error:', errorData);
+        throw new Error(errorMessage);
       }
 
       // Parse and return the created item from backend

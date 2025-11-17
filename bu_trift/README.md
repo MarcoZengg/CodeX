@@ -12,8 +12,8 @@ This project is part of **CS-411 Software Engineering** and addresses the **Sust
 
 According to the course requirements:
 - ✅ **Graphical User Interface (GUI)**: React-based web application (Mobile & Desktop compatible)
-- ⏳ **Backend Implementation**: Object-Oriented Classes in Python or Java (TODO)
-- ⏳ **API Integration**: Connect frontend to backend services (TODO)
+- ✅ **Backend Implementation**: Object-Oriented Classes in Python with FastAPI
+- ✅ **API Integration**: Frontend connected to backend REST API
 - ⏳ **Testing**: Comprehensive test coverage (TODO)
 
 ## 🚀 Current Progress
@@ -40,29 +40,56 @@ According to the course requirements:
 - File-based routing with React Router v7
 - Component-based architecture
 
-### ⏳ Pending Implementation
+#### Backend (Python + FastAPI)
+- **FastAPI REST API**: High-performance Python web framework
+- **SQLAlchemy ORM**: Database abstraction layer
+- **SQLite Database**: Persistent data storage
+- **CORS Middleware**: Cross-origin resource sharing enabled
+- **Pydantic Models**: Request/response validation
 
-#### Backend Services (Critical)
-- [ ] **Python/Java Backend**: Object-Oriented class implementation
-  - [ ] Item management service
-  - [ ] User authentication & profile service
-  - [ ] Messaging service
-  - [ ] Image upload & storage service
-- [ ] **Database**: Design and implement data persistence
-  - [ ] Items table/schema
-  - [ ] Users table/schema
-  - [ ] Messages & Conversations schema
-- [ ] **API Endpoints**: RESTful API or GraphQL
-  - [ ] Item CRUD operations
-  - [ ] User authentication & authorization
-  - [ ] Messaging endpoints
-  - [ ] Image upload endpoints
+#### Backend Services Implemented
+- ✅ **Item Management Service**: Complete CRUD operations
+  - ✅ GET all items (`/api/items`)
+  - ✅ GET item by ID (`/api/items/{item_id}`)
+  - ✅ POST create item (`/api/items`)
+  - ✅ Database persistence with SQLite
+
+#### Database
+- ✅ **SQLite Database**: `butrift.db` file (auto-generated)
+- ✅ **Items Table**: Fully implemented with schema
+  - Columns: id, title, description, price, category, condition, seller_id, status, location, is_negotiable, created_date
 
 #### Frontend Integration
-- [ ] Replace mock data with API calls
+- ✅ **API Integration**: Frontend connected to FastAPI backend
+- ✅ **Item Entity**: Calls real backend API (`http://localhost:8000/api/items`)
+- ✅ **Fallback to Mock Data**: If backend unavailable, uses mock data
+- ✅ **Error Handling**: Try-catch blocks for API calls
+- ⏳ **User Authentication**: Still using mock data
+- ⏳ **Messaging**: Still using mock data
+- ⏳ **Image Upload**: Not yet implemented
+
+### ⏳ Pending Implementation
+
+#### Backend Services (In Progress)
+- [ ] **User Management Service**: Authentication & profile
+  - [ ] User registration & login endpoints
+  - [ ] JWT authentication
+  - [ ] User profile CRUD
+  - [ ] Users database table
+- [ ] **Messaging Service**: Real-time messaging
+  - [ ] Conversations CRUD
+  - [ ] Messages CRUD
+  - [ ] Database tables for conversations & messages
+- [ ] **Image Upload Service**: File handling
+  - [ ] Image upload endpoints
+  - [ ] Image storage (local or cloud)
+  - [ ] Image URLs in item records
+
+#### Frontend Features
 - [ ] Implement authentication flow
-- [ ] Add error handling and loading states
+- [ ] Replace remaining mock data with API calls (User, Message, Conversation)
 - [ ] Implement image upload functionality
+- [ ] Add error handling and loading states
 
 #### Testing
 - [ ] Unit tests for entity classes
@@ -89,16 +116,19 @@ According to the course requirements:
 - **Icons**: Lucide React
 - **Build Tool**: Vite
 
-### Backend (To Be Implemented)
-- **Language**: Python or Java (TBD)
-- **Framework**: To be determined
-- **Database**: To be determined
+### Backend
+- **Language**: Python 3.12+
+- **Framework**: FastAPI
+- **ORM**: SQLAlchemy
+- **Database**: SQLite (development) / PostgreSQL (production ready)
+- **Validation**: Pydantic
+- **Server**: Uvicorn
 
 ## 📁 Project Structure
 
 ```
 bu_trift/
-├── app/
+├── app/                    # Frontend (React)
 │   ├── routes/              # Page routes
 │   │   ├── home.tsx         # Home page
 │   │   ├── items.tsx        # Browse items
@@ -110,18 +140,26 @@ bu_trift/
 │   │   ├── home/           # Home page components
 │   │   ├── ui/             # Reusable UI components
 │   │   └── Layout.tsx      # Main layout
-│   ├── entities/           # Data models & mock implementations
-│   │   ├── Item.ts         # Item entity (with mock data)
-│   │   ├── User.ts         # User entity (with mock data)
-│   │   ├── Message.ts      # Message entity (with mock data)
-│   │   └── Conversation.ts # Conversation entity (with mock data)
+│   ├── entities/           # Data models & API clients
+│   │   ├── Item.ts         # Item entity (calls FastAPI)
+│   │   ├── User.ts         # User entity (mock data)
+│   │   ├── Message.ts      # Message entity (mock data)
+│   │   ├── Conversation.ts # Conversation entity (mock data)
+│   │   └── index.ts        # Entity exports
 │   ├── utils/              # Utility functions
 │   ├── root.tsx            # Root component
 │   └── app.css             # Global styles
+├── backend/                # Backend (FastAPI + SQLAlchemy)
+│   ├── main.py             # FastAPI app & endpoints
+│   ├── database.py         # Database connection setup
+│   ├── models/             # Database models (SQLAlchemy)
+│   │   └── item.py         # ItemDB model
+│   ├── butrift.db          # SQLite database (auto-generated)
+│   └── requirement.txt     # Python dependencies
 ├── public/                 # Static assets
-├── package.json
-├── tsconfig.json
-├── vite.config.ts
+├── package.json            # Frontend dependencies
+├── tsconfig.json           # TypeScript config
+├── vite.config.ts          # Vite config
 └── README.md
 ```
 
@@ -129,8 +167,9 @@ bu_trift/
 
 ### Prerequisites
 
-- Node.js 18+ and npm
-- (Future) Python 3.9+ or Java 17+ for backend
+- **Node.js 18+** and npm
+- **Python 3.12+** and pip
+- (Optional) Python virtual environment (recommended)
 
 ### Installation
 
@@ -140,97 +179,190 @@ git clone <repository-url>
 cd bu_trift
 ```
 
-2. Install dependencies:
+2. Install frontend dependencies:
 ```bash
 npm install
 ```
 
+3. Install backend dependencies:
+```bash
+cd backend
+pip install fastapi[standard] sqlalchemy
+# Or use the requirement file:
+pip install -r requirement.txt
+cd ..
+```
+
 ### Development
 
-Start the development server:
+#### Start Backend Server
 
+Open a terminal and run:
+```bash
+cd backend
+uvicorn main:app --reload
+```
+
+The API will be available at:
+- **API**: `http://localhost:8000`
+- **API Documentation (Swagger UI)**: `http://localhost:8000/docs`
+- **Alternative API Docs (ReDoc)**: `http://localhost:8000/redoc`
+
+#### Start Frontend Server
+
+Open another terminal and run:
 ```bash
 npm run dev
 ```
 
-The application will be available at `http://localhost:5173`.
+The frontend will be available at `http://localhost:5173`.
+
+**Important**: Both servers must be running simultaneously for the app to work.
 
 ### Building for Production
 
-Create a production build:
+#### Frontend
 
+Create a production build:
 ```bash
 npm run build
 ```
 
 Start the production server:
-
 ```bash
 npm start
 ```
 
+#### Backend
+
+The backend uses Uvicorn for production. For deployment:
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+Or use a production ASGI server like Gunicorn with Uvicorn workers.
+
 ## 📝 Development Notes
 
-### Current State: Mock Data
+### Current State: Hybrid (Backend + Mock Data)
 
-The application currently uses **mock data** for all entity operations:
-- `ItemEntity.filter()` - Returns mock items
-- `ItemEntity.get()` - Returns mock item by ID
-- `UserEntity.me()` - Returns mock current user
-- `ConversationEntity.filter()` - Returns mock conversations
-- `MessageEntity.filter()` - Returns mock messages
+#### ✅ Fully Integrated with Backend
+- **Item Entity** (`app/entities/Item.ts`)
+  - `Item.filter()` - Calls `GET /api/items` (with fallback to mock data)
+  - `Item.get()` - Calls `GET /api/items/{id}` (with fallback to mock data)
+  - `Item.create()` - Calls `POST /api/items` to create items in database
 
-**All entity methods are located in:**
-- `app/entities/Item.ts`
-- `app/entities/User.ts`
-- `app/entities/Message.ts`
-- `app/entities/Conversation.ts`
+#### ⏳ Still Using Mock Data
+- **User Entity** (`app/entities/User.ts`)
+  - `User.me()` - Returns mock user data
+- **Conversation Entity** (`app/entities/Conversation.ts`)
+  - `Conversation.filter()` - Returns mock conversations
+  - `Conversation.create()` - Returns mock conversation
+- **Message Entity** (`app/entities/Message.ts`)
+  - `Message.filter()` - Returns mock messages
+  - `Message.create()` - Returns mock message
+
+### API Endpoints
+
+**Current Implemented Endpoints:**
+- `GET /` - API health check
+- `GET /api/items` - Get all items (with optional filters)
+- `GET /api/items/{item_id}` - Get item by ID
+- `POST /api/items` - Create new item
+- `GET /api/health` - Database health check
+
+**To Be Implemented:**
+- User endpoints (`/api/users`, `/api/auth`)
+- Message endpoints (`/api/messages`, `/api/conversations`)
+- Image upload endpoints
+
+### Database
+
+The SQLite database (`backend/butrift.db`) is automatically created when you first run the backend server. All created items are persisted in this file.
+
+**Viewing the Database:**
+- Use SQLite browser tools (DB Browser for SQLite)
+- Use Python: `import sqlite3; conn = sqlite3.connect('backend/butrift.db')`
+- Use command line: `sqlite3 backend/butrift.db`
 
 ### Next Steps
 
-1. **Design Backend Architecture**
-   - Choose Python or Java
-   - Design database schema
-   - Plan API endpoints
+1. **Implement User Authentication**
+   - Create User model in `backend/models/user.py`
+   - Add user endpoints in `backend/main.py`
+   - Update frontend User entity to call API
 
-2. **Implement Backend Services**
-   - Create OOP classes for each entity
-   - Implement CRUD operations
-   - Add authentication middleware
+2. **Implement Messaging**
+   - Create Message and Conversation models
+   - Add messaging endpoints
+   - Update frontend entities to call API
 
-3. **Connect Frontend to Backend**
-   - Replace mock implementations with API calls
-   - Add environment variables for API URLs
-   - Implement error handling
+3. **Add Image Upload**
+   - Implement file upload endpoints
+   - Store images (local or cloud storage)
+   - Update Item model to include image URLs
 
 4. **Testing**
-   - Write unit tests
-   - Write integration tests
+   - Write unit tests for backend models
+   - Write integration tests for API endpoints
+   - Write frontend component tests
    - Set up CI/CD
 
 ## 🔧 Available Scripts
 
+### Frontend
 - `npm run dev` - Start development server with HMR
 - `npm run build` - Create production build
 - `npm start` - Start production server
 - `npm run typecheck` - Run TypeScript type checking
 
+### Backend
+- `uvicorn main:app --reload` - Start development server with auto-reload
+- `uvicorn main:app --host 0.0.0.0 --port 8000` - Start production server
+- `python -m pytest` - Run tests (when implemented)
+
 ## 🌐 Browser Support
 
 - ✅ Chrome/Edge (tested)
-- ✅ Safari (tested)
+- ✅ Safari (tested and optimized)
 - ✅ Firefox (should work)
+
+## 🔍 API Documentation
+
+When the backend server is running, visit:
+- **Swagger UI**: `http://localhost:8000/docs` - Interactive API documentation
+- **ReDoc**: `http://localhost:8000/redoc` - Alternative API documentation
+
+These provide automatic documentation for all API endpoints with the ability to test them directly in the browser.
 
 ## 📚 Resources
 
+### Frontend
 - [React Router Documentation](https://reactrouter.com/)
 - [Tailwind CSS Documentation](https://tailwindcss.com/)
 - [shadcn/ui Components](https://ui.shadcn.com/)
 - [TypeScript Documentation](https://www.typescriptlang.org/)
 
+### Backend
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+- [SQLAlchemy Documentation](https://docs.sqlalchemy.org/)
+- [Pydantic Documentation](https://docs.pydantic.dev/)
+- [Uvicorn Documentation](https://www.uvicorn.org/)
+
+### Project Documentation
+Detailed guides are available in the `docs/` folder:
+- `FASTAPI_DATABASE_IMPLEMENTATION_GUIDE.md` - How to add new features to backend
+- `DATABASE_CONCEPTS_EXPLAINED.md` - Understanding database setup
+- `INCREMENTAL_SETUP_GUIDE.md` - Step-by-step backend setup
+- `API_FUNDAMENTALS_EXPLAINED.md` - API concepts and patterns
+- `FRONTEND_BACKEND_CONNECTION.md` - Connecting frontend to backend
+
 ## 👥 Team
 
-[Add team member names and roles]
+Kenneth Chen (U01705999) - Quality Assurance/Testing Lead & Deployment Coordinator
+Minjun Kim (U18012972) - Database Administrator & Security Specialist
+Jerry Teixeira (U61825071) - Frontend Developer & UI/UX Designer
+Xiankun Zeng (U54725278) -Project Manager & Backend Developer
 
 ## 📄 License
 

@@ -1,0 +1,18 @@
+from sqlalchemy import Column, String, Float, Boolean, DateTime
+from sqlalchemy.sql import func
+from database import Base
+
+class ItemDB(Base):
+    __tablename__ = "items"
+    
+    id = Column(String, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    description = Column(String)
+    price = Column(Float, nullable=False)
+    category = Column(String, nullable=False)
+    condition = Column(String, nullable=False)
+    seller_id = Column(String, nullable=False)
+    status = Column(String, default="available")
+    location = Column(String)
+    is_negotiable = Column(Boolean, default=False)
+    created_date = Column(DateTime, server_default=func.now())
