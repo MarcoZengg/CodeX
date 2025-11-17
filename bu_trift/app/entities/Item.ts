@@ -183,8 +183,29 @@ export class ItemEntity {
   }
 
   static async create(data: Partial<Item>): Promise<Item> {
-    // TODO: Implement API call
-    throw new Error("Not implemented");
+    try {
+      // Call FastAPI backend endpoint
+      const response = await fetch('http://localhost:8000/api/items', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        // Get error message from backend if available
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to create item: ${response.statusText}`);
+      }
+
+      // Parse and return the created item from backend
+      const createdItem = await response.json();
+      return createdItem as Item;
+    } catch (error) {
+      console.error('Error creating item:', error);
+      throw error;
+    }
   }
 }
 
