@@ -86,7 +86,7 @@ body {
   background-color: #ffffff;
 }
 
-@media (prefers-color-scheme: dark) {
+  @media (prefers-color-scheme: dark) {
   html,
   body {
     color-scheme: dark;

@@ -124,62 +124,101 @@ export class ItemEntity {
     sortBy?: string,
     limit?: number
   ): Promise<Item[]> {
-    // Mock implementation for development
-    let filtered = [...mockItems];
-
-    // Apply filters
-    if (filters.status) {
-      filtered = filtered.filter((item) => item.status === filters.status);
-    }
-    if (filters.category) {
-      filtered = filtered.filter((item) => item.category === filters.category);
-    }
-    if (filters.condition) {
-      filtered = filtered.filter((item) => item.condition === filters.condition);
-    }
-    if (filters.seller_id) {
-      filtered = filtered.filter((item) => item.seller_id === filters.seller_id);
-    }
-
-    // Apply sorting
-    if (sortBy) {
-      if (sortBy === "-created_date" || sortBy === "created_date") {
-        filtered.sort((a, b) => {
-          const dateA = new Date(a.created_date || 0).getTime();
-          const dateB = new Date(b.created_date || 0).getTime();
-          return sortBy.startsWith("-") ? dateB - dateA : dateA - dateB;
-        });
+    try {
+      // Call FastAPI backend endpoint
+      const params = new URLSearchParams();
+      if (filters.status) params.append('status', filters.status);
+      if (filters.category) params.append('category', filters.category);
+      if (filters.condition) params.append('condition', filters.condition);
+      if (filters.seller_id) params.append('seller_id', filters.seller_id);
+      
+      const queryString = params.toString();
+      const url = queryString 
+        ? `http://localhost:8000/api/items?${queryString}`
+        : 'http://localhost:8000/api/items';
+      
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch items: ${response.statusText}`);
       }
-      if (sortBy === "-price" || sortBy === "price") {
-        filtered.sort((a, b) => {
-          return sortBy.startsWith("-") ? b.price - a.price : a.price - b.price;
-        });
+      
+      let items: Item[] = await response.json();
+      
+      // Apply client-side sorting (backend can do this later)
+      if (sortBy) {
+        if (sortBy === "-created_date" || sortBy === "created_date") {
+          items.sort((a, b) => {
+            const dateA = new Date(a.created_date || 0).getTime();
+            const dateB = new Date(b.created_date || 0).getTime();
+            return sortBy.startsWith("-") ? dateB - dateA : dateA - dateB;
+          });
+        }
+        if (sortBy === "-price" || sortBy === "price") {
+          items.sort((a, b) => {
+            return sortBy.startsWith("-") ? b.price - a.price : a.price - b.price;
+          });
+        }
       }
+      
+      // Apply limit
+      if (limit) {
+        items = items.slice(0, limit);
+      }
+      
+      return items;
+    } catch (error) {
+      console.error('Error fetching items from backend, using fallback mock data:', error);
+      // Fallback to mock data if backend is unavailable
+      let filtered = [...mockItems];
+      
+      if (filters.status) {
+        filtered = filtered.filter((item) => item.status === filters.status);
+      }
+      if (filters.category) {
+        filtered = filtered.filter((item) => item.category === filters.category);
+      }
+      if (filters.condition) {
+        filtered = filtered.filter((item) => item.condition === filters.condition);
+      }
+      if (filters.seller_id) {
+        filtered = filtered.filter((item) => item.seller_id === filters.seller_id);
+      }
+      
+      if (limit) {
+        filtered = filtered.slice(0, limit);
+      }
+      
+      return new Promise((resolve) => {
+        setTimeout(() => resolve(filtered), 100);
+      });
     }
-
-    // Apply limit
-    if (limit) {
-      filtered = filtered.slice(0, limit);
-    }
-
-    // Simulate network delay for Safari compatibility
-    return new Promise((resolve) => {
-      setTimeout(() => resolve(filtered), 100);
-    });
   }
 
   static async get(id: string): Promise<Item> {
-    // Mock implementation for development
-    const found = mockItems.find((item) => item.id === id);
-    if (found) {
+    try {
+      // Call FastAPI backend endpoint
+      const response = await fetch(`http://localhost:8000/api/items/${id}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch item: ${response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching item from backend, using fallback mock data:', error);
+      // Fallback to mock data if backend is unavailable
+      const found = mockItems.find((item) => item.id === id);
+      if (found) {
+        return new Promise((resolve) => {
+          setTimeout(() => resolve(found), 100);
+        });
+      }
+      // Return first item as fallback
       return new Promise((resolve) => {
-        setTimeout(() => resolve(found), 100);
+        setTimeout(() => resolve(mockItems[0]), 100);
       });
     }
-    // Return first item as fallback
-    return new Promise((resolve) => {
-      setTimeout(() => resolve(mockItems[0]), 100);
-    });
   }
 
   static async create(data: Partial<Item>): Promise<Item> {
