@@ -4,7 +4,7 @@ import { Item, User, Conversation } from "@/entities";
 import type { Item as ItemType } from "@/entities/Item";
 import type { User as UserType } from "@/entities/User";
 import type { Conversation as ConversationType } from "@/entities/Conversation";
-import { useNavigate, useSearchParams } from "react-router";
+import { useNavigate } from "react-router";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,6 @@ export function meta({ params }: Route.MetaArgs) {
 }
 
 export default function ItemDetail({ params }: Route.ComponentProps) {
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [item, setItem] = useState<ItemType | null>(null);
   const [seller, setSeller] = useState<any>(null);
@@ -38,7 +37,7 @@ export default function ItemDetail({ params }: Route.ComponentProps) {
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserType | null>(null);
   
-  const itemId = searchParams.get("id") || params.id;
+  const itemId = params.id;
 
   useEffect(() => {
     if (itemId) {

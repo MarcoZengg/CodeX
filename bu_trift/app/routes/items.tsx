@@ -187,7 +187,7 @@ export default function Items() {
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.4, delay: index * 0.05 }}
                 >
-                  <Link to={`${createPageUrl("ItemDetails")}?id=${item.id}`}>
+                  <Link to={`/items/${item.id}`}>
                     <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 group border-neutral-200/60">
                       <div className="aspect-square bg-gradient-to-br from-neutral-100 to-neutral-200 relative overflow-hidden">
                         {item.images?.[0] ? (

@@ -62,7 +62,7 @@ export default function FeaturedItems({ items, isLoading }: FeaturedItemsProps) 
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: index * 0.1 }}
             >
-              <Link to={`${createPageUrl("ItemDetails")}?id=${item.id}`}>
+              <Link to={`/items/${item.id}`}>
                 <Card className="overflow-hidden hover:shadow-xl transition-all duration-300 group border-neutral-200/60">
                   <div className="aspect-square bg-gradient-to-br from-neutral-100 to-neutral-200 relative overflow-hidden">
                     {item.images?.[0] ? (

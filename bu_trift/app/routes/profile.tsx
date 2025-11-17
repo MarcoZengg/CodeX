@@ -36,7 +36,7 @@ function ItemGrid({ items }: ItemGridProps) {
   return (
     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
       {items.map((item) => (
-        <Link key={item.id} to={`${createPageUrl("ItemDetails")}?id=${item.id}`}>
+        <Link key={item.id} to={`/items/${item.id}`}>
           <Card className="overflow-hidden hover:shadow-lg transition-shadow duration-300 border-neutral-200/60">
             <div className="aspect-square bg-neutral-100 relative overflow-hidden">
               {item.images?.[0] ? (

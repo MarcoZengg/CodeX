@@ -46,7 +46,8 @@ export default function Home() {
 
   const handleSearch = () => {
     if (searchQuery.trim()) {
-      window.location.href = createPageUrl(`Browse?search=${encodeURIComponent(searchQuery)}`);
+      const browseUrl = createPageUrl("Browse");
+      window.location.href = `${browseUrl}?search=${encodeURIComponent(searchQuery)}`;
     }
   };
 
@@ -81,7 +82,7 @@ export default function Home() {
                   </Button>
                 </Link>
                 <Link to={createPageUrl("Sell")}>
-                  <Button size="lg" variant="outline" className="border-white text-white hover:bg-white hover:text-red-700 font-semibold px-8">
+                  <Button size="lg" variant="outline" className="border-white text-red-700 hover:bg-red-50 hover:text-red-700 font-semibold px-8">
                     Sell Something
                   </Button>
                 </Link>
