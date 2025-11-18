@@ -1,75 +1,8 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { Route } from "./+types/profile";
 import { User, Item } from "@/entities";
 import type { User as UserType } from "@/entities/User";
 import type { Item as ItemType } from "@/entities/Item";
-import { Link } from "react-router";
-import { createPageUrl } from "@/utils";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Star, Calendar, Package, Edit3 } from "lucide-react";
-import { motion } from "framer-motion";
-import { Skeleton } from "@/components/ui/skeleton";
-
-interface ItemGridProps {
-  items: ItemType[];
-}
-
-function ItemGrid({ items }: ItemGridProps) {
-  if (items.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <Package className="w-16 h-16 text-neutral-400 mx-auto mb-4" />
-        <h3 className="text-lg font-semibold text-neutral-900 mb-2">No items yet</h3>
-        <p className="text-neutral-600 mb-4">Start selling to see your listings here</p>
-        <Link to={createPageUrl("Sell")}>
-          <Button className="bg-red-600 hover:bg-red-700">
-            List Your First Item
-          </Button>
-        </Link>
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {items.map((item) => (
-        <Link key={item.id} to={`/items/${item.id}`}>
-          <Card className="overflow-hidden hover:shadow-lg transition-shadow duration-300 border-neutral-200/60">
-            <div className="aspect-square bg-neutral-100 relative overflow-hidden">
-              {item.images?.[0] ? (
-                <img
-                  src={item.images[0]}
-                  alt={item.title}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <Package className="w-12 h-12 text-neutral-400" />
-                </div>
-              )}
-              <div className="absolute top-3 right-3">
-                <Badge variant={item.status === "available" ? "default" : "secondary"}>
-                  {item.status}
-                </Badge>
-              </div>
-            </div>
-            <CardContent className="p-4">
-              <h3 className="font-semibold text-neutral-900 mb-2 line-clamp-1">
-                {item.title}
-              </h3>
-              <p className="text-xl font-bold text-red-600">
-                ${item.price}
-              </p>
-            </CardContent>
-          </Card>
-        </Link>
-      ))}
-    </div>
-  );
-}
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -80,160 +13,172 @@ export function meta({}: Route.MetaArgs) {
 
 export default function Profile() {
   const [user, setUser] = useState<UserType | null>(null);
-  const [userItems, setUserItems] = useState<ItemType[]>([]);
+  const [items, setItems] = useState<ItemType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadUserData();
-  }, []);
+    async function load() {
+      try {
+        setIsLoading(true);
+        const u = await User.me();
+        setUser(u);
 
-  const loadUserData = async () => {
-    try {
-      const currentUser = await User.me();
-      setUser(currentUser);
-      
-      const items = await Item.filter({ seller_id: currentUser.id! }, "-created_date");
-      setUserItems(items);
-    } catch (error) {
-      console.error("Error loading user data:", error);
-    } finally {
-      setIsLoading(false);
+        const myItems = await Item.filter(
+          { seller_id: u.id! },
+          "-created_date"
+        );
+        setItems(myItems ?? []);
+      } catch (e) {
+        console.error("Error loading profile:", e);
+      } finally {
+        setIsLoading(false);
+      }
     }
-  };
+
+    load();
+  }, []);
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-white to-neutral-50 p-6">
-        <div className="max-w-4xl mx-auto space-y-6">
-          <Skeleton className="h-48 w-full rounded-xl" />
-          <Skeleton className="h-64 w-full rounded-xl" />
+        <div className="max-w-4xl mx-auto space-y-4">
+          <div className="h-40 w-full bg-neutral-100 rounded-xl animate-pulse" />
+          <div className="h-64 w-full bg-neutral-100 rounded-xl animate-pulse" />
         </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-white to-neutral-50">
+        <p className="text-neutral-700">Could not load profile.</p>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-neutral-50 p-6">
-      <div className="max-w-4xl mx-auto">
-        {/* Profile Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-        >
-          <Card className="mb-8 border-neutral-200/60 overflow-hidden">
-            <div className="h-32 bg-gradient-to-r from-red-600 to-red-700"></div>
-            <CardContent className="relative pt-0 pb-8">
-              <div className="flex flex-col md:flex-row items-start md:items-end gap-6">
-                <div className="relative -mt-16">
-                  <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center border-4 border-white shadow-lg">
-                    {user?.profile_image_url ? (
-                      <img
-                        src={user.profile_image_url}
-                        alt={user.display_name}
-                        className="w-full h-full rounded-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-2xl font-bold text-red-600">
-                        {user?.display_name?.[0]?.toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                
-                <div className="flex-1">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
-                      <h1 className="text-2xl font-bold text-neutral-900 mb-2">
-                        {user?.display_name || "BU Student"}
-                      </h1>
-                      <div className="flex flex-wrap items-center gap-4 text-sm text-neutral-600">
-                        {user?.graduation_year && (
-                          <div className="flex items-center gap-1">
-                            <Calendar className="w-4 h-4" />
-                            Class of {user.graduation_year}
-                          </div>
-                        )}
-                        {user?.major && (
-                          <div className="flex items-center gap-1">
-                            <Package className="w-4 h-4" />
-                            {user.major}
-                          </div>
-                        )}
-                        {user?.is_verified && (
-                          <Badge className="bg-green-100 text-green-800">
-                            ✓ Verified BU Student
-                          </Badge>
-                        )}
+      <div className="max-w-4xl mx-auto space-y-8">
+        {/* Profile header */}
+        <div className="bg-white rounded-2xl shadow-sm border border-neutral-200/60 overflow-hidden">
+          <div className="h-24 bg-gradient-to-r from-red-600 to-red-700" />
+          <div className="px-6 pb-6 -mt-10 flex items-end gap-4">
+            <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center border-4 border-white shadow-md">
+              <span className="text-2xl font-bold text-red-600">
+                {user.display_name?.[0]?.toUpperCase() ||
+                  user.email?.[0]?.toUpperCase() ||
+                  "B"}
+              </span>
+            </div>
+            <div className="flex-1">
+              <h1 className="relative -top-4 text-2xl font-bold text-neutral-900 leading-snug mb-0.5">
+                {user.display_name || "BU Student"}
+              </h1>
+              <p className="relative -top-4 text-sm text-neutral-600 mt-0">
+                {user.email || "Verified @bu.edu"}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Stats + listings */}
+        <div className="bg-white rounded-2xl shadow-sm border border-neutral-200/60 p-6 space-y-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="border border-neutral-200 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-neutral-900">
+                {items.length}
+              </div>
+              <div className="text-sm text-neutral-600 mt-1">
+                Items listed
+              </div>
+            </div>
+            <div className="border border-neutral-200 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-neutral-900">
+                {
+                  items.filter(
+                    (item) => item.status === "available"
+                  ).length
+                }
+              </div>
+              <div className="text-sm text-neutral-600 mt-1">
+                Active listings
+              </div>
+            </div>
+            <div className="border border-neutral-200 rounded-xl p-4 text-center hidden md:block">
+              <div className="text-2xl font-bold text-neutral-900">
+                {
+                  items.filter((item) => item.status === "sold")
+                    .length
+                }
+              </div>
+              <div className="text-sm text-neutral-600 mt-1">
+                Sold items
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h2 className="text-lg font-semibold text-neutral-900 mb-4">
+              Your listings
+            </h2>
+            {items.length === 0 ? (
+              <p className="text-sm text-neutral-600">
+                You have not listed any items yet.
+              </p>
+            ) : (
+              <div className="grid md:grid-cols-2 gap-4">
+                {items.map((item) => (
+                  <div
+                    key={item.id}
+                    className="border border-neutral-200 rounded-xl overflow-hidden hover:shadow-sm transition-shadow bg-white"
+                  >
+                    <div className="h-36 bg-neutral-100 overflow-hidden">
+                      {item.images?.[0] ? (
+                        <img
+                          src={item.images[0]}
+                          alt={item.title}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-neutral-400 text-sm">
+                          No image
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-3 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-semibold text-neutral-900 line-clamp-1">
+                          {item.title}
+                        </h3>
+                        <span className="text-xs px-2 py-0.5 rounded-full border border-neutral-200 text-neutral-600">
+                          {item.status}
+                        </span>
                       </div>
+                      <p className="text-sm text-neutral-600 line-clamp-2">
+                        {item.description}
+                      </p>
+                      <p className="text-base font-bold text-red-600 mt-1">
+                        ${item.price}
+                      </p>
                     </div>
-                    
-                    <Button variant="outline" className="flex items-center gap-2">
-                      <Edit3 className="w-4 h-4" />
-                      Edit Profile
-                    </Button>
                   </div>
-                </div>
+                ))}
               </div>
+            )}
+          </div>
+        </div>
 
-              {user?.bio && (
-                <div className="mt-6">
-                  <p className="text-neutral-700">{user.bio}</p>
-                </div>
-              )}
-
-              {/* Stats */}
-              <div className="grid grid-cols-3 gap-6 mt-6 pt-6 border-t border-neutral-200">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-neutral-900">{userItems.length}</div>
-                  <div className="text-sm text-neutral-600">Items Listed</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-neutral-900">{user?.total_sales || 0}</div>
-                  <div className="text-sm text-neutral-600">Items Sold</div>
-                </div>
-                <div className="text-center">
-                  <div className="flex items-center justify-center gap-1">
-                    <div className="text-2xl font-bold text-neutral-900">
-                      {user?.rating ? user.rating.toFixed(1) : "5.0"}
-                    </div>
-                    <Star className="w-5 h-5 text-yellow-400 fill-current" />
-                  </div>
-                  <div className="text-sm text-neutral-600">Rating</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Listings */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-        >
-          <Tabs defaultValue="active" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="active">Active ({userItems.filter(item => item.status === "available").length})</TabsTrigger>
-              <TabsTrigger value="sold">Sold ({userItems.filter(item => item.status === "sold").length})</TabsTrigger>
-              <TabsTrigger value="all">All ({userItems.length})</TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="active" className="mt-6">
-              <ItemGrid items={userItems.filter(item => item.status === "available")} />
-            </TabsContent>
-            
-            <TabsContent value="sold" className="mt-6">
-              <ItemGrid items={userItems.filter(item => item.status === "sold")} />
-            </TabsContent>
-            
-            <TabsContent value="all" className="mt-6">
-              <ItemGrid items={userItems} />
-            </TabsContent>
-          </Tabs>
-        </motion.div>
+        {/* Reviews placeholder (UI only, no backend calls yet) */}
+        <div className="bg-white rounded-2xl shadow-sm border border-neutral-200/60 p-6">
+          <h2 className="text-lg font-semibold text-neutral-900 mb-2">
+            Reviews
+          </h2>
+          <p className="text-sm text-neutral-600">
+            Reviews feature coming soon.
+          </p>
+        </div>
       </div>
     </div>
   );
 }
-

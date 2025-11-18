@@ -1,195 +1,658 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { Route } from "./+types/messages";
-import { Conversation, Message, User } from "@/entities";
+import { Conversation, User, Message } from "@/entities";
 import type { Conversation as ConversationType } from "@/entities/Conversation";
-import type { Message as MessageType } from "@/entities/Message";
 import type { User as UserType } from "@/entities/User";
-import { useSearchParams } from "react-router";
-import { Card } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { MessageCircle } from "lucide-react";
-import { motion } from "framer-motion";
-
-interface ConversationListProps {
-  conversations: ConversationType[];
-  onSelect: (id: string) => void;
-  selectedId: string | null;
-  currentUser: UserType | null;
-}
-
-const ConversationList = ({ conversations, onSelect, selectedId, currentUser }: ConversationListProps) => (
-  <div className="flex flex-col h-full">
-    <div className="p-4 border-b">
-      <h2 className="text-xl font-bold">Inbox</h2>
-    </div>
-    <div className="flex-1 overflow-y-auto">
-      {conversations.map(convo => {
-        const otherParticipantId = convo.participant_ids.find(id => id !== currentUser?.id);
-        const otherUserName = `User ${otherParticipantId?.substring(0, 4)}`;
-        
-        return (
-          <div
-            key={convo.id}
-            onClick={() => onSelect(convo.id!)}
-            className={`p-4 border-b cursor-pointer transition-colors ${selectedId === convo.id ? 'bg-red-50' : 'hover:bg-neutral-50'}`}
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center text-red-600 font-bold">
-                {otherUserName[0]}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-neutral-800 truncate">{otherUserName}</div>
-                <p className="text-sm text-neutral-600 truncate">{convo.item_title}</p>
-                <p className="text-sm text-neutral-500 truncate">{convo.last_message_snippet}</p>
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  </div>
-);
-
-interface MessageViewProps {
-  conversation: ConversationType | undefined;
-  currentUser: UserType | null;
-}
-
-const MessageView = ({ conversation, currentUser }: MessageViewProps) => {
-  const [messages, setMessages] = useState<MessageType[]>([]);
-  const [newMessage, setNewMessage] = useState("");
-
-  useEffect(() => {
-    if (conversation) {
-      Message.filter({ conversation_id: conversation.id! }, "created_date").then(setMessages);
-    }
-  }, [conversation]);
-
-  const handleSend = async () => {
-    if (!newMessage.trim() || !conversation || !currentUser) return;
-    await Message.create({
-      conversation_id: conversation.id!,
-      sender_id: currentUser.id!,
-      content: newMessage,
-    });
-    setMessages(prev => [...prev, { 
-      sender_id: currentUser.id!, 
-      content: newMessage, 
-      conversation_id: conversation.id!,
-      created_date: new Date().toISOString() 
-    }]);
-    setNewMessage("");
-  };
-  
-  if (!conversation) return (
-    <div className="flex flex-col h-full items-center justify-center text-center p-8 bg-neutral-50">
-      <MessageCircle className="w-16 h-16 text-neutral-300 mb-4" />
-      <h3 className="text-xl font-semibold text-neutral-700">Select a conversation</h3>
-      <p className="text-neutral-500">Your messages will appear here.</p>
-    </div>
-  );
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="p-4 border-b flex items-center gap-3">
-        {conversation.item_image_url && <img src={conversation.item_image_url} className="w-12 h-12 rounded-lg object-cover" />}
-        <div>
-          <h3 className="font-bold">{conversation.item_title}</h3>
-          <p className="text-sm text-neutral-600">Conversation about this item</p>
-        </div>
-      </div>
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
-        {messages.map((msg, index) => (
-          <div key={index} className={`flex ${msg.sender_id === currentUser?.id ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-xs md:max-w-md p-3 rounded-2xl ${msg.sender_id === currentUser?.id ? 'bg-red-600 text-white' : 'bg-neutral-200 text-neutral-800'}`}>
-              {msg.content}
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="p-4 border-t bg-white">
-        <div className="flex gap-2">
-          <input
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Type your message..."
-            className="flex-1 p-2 border rounded-lg focus:ring-red-500 focus:border-red-500"
-          />
-          <button onClick={handleSend} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Send</button>
-        </div>
-      </div>
-    </div>
-  );
-};
+import type { Message as MessageType } from "@/entities/Message";
 
 export function meta({}: Route.MetaArgs) {
   return [
     { title: "Messages - BUTrift" },
-    { name: "description", content: "View and send messages" },
+    { name: "description", content: "View your conversations" },
   ];
 }
 
 export default function Messages() {
-  const [searchParams] = useSearchParams();
-  const [conversations, setConversations] = useState<ConversationType[]>([]);
-  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<UserType | null>(null);
+  const [conversations, setConversations] = useState<ConversationType[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const [messages, setMessages] = useState<MessageType[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+
+  // Mock meetup details (time & place) – front-end only for now
+  const [meetupTime, setMeetupTime] = useState<string | null>(null);
+  const [meetupPlace, setMeetupPlace] = useState<string>("");
+  const [isEditingMeetup, setIsEditingMeetup] = useState(false);
+  const [editMeetupTime, setEditMeetupTime] = useState<string>("");
+  const [editMeetupPlace, setEditMeetupPlace] = useState<string>("");
+
+
+  // Mock transaction + review state – front-end only
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [rating, setRating] = useState<number | null>(null);
+  const [comment, setComment] = useState("");
+  const [hasLeftReview, setHasLeftReview] = useState(false);
+  const [otherHasLeftReview, setOtherHasLeftReview] = useState(false);
+
+  // Reset mock states when switching conversations
+  // + initialize meetupPlace from listing's pickup location if available
   useEffect(() => {
-    async function fetchData() {
-      setIsLoading(true);
+    setMeetupTime(null);
+    setIsCompleted(false);
+    setRating(null);
+    setComment("");
+    setHasLeftReview(false);
+    setOtherHasLeftReview(false);
+
+    const conv = conversations.find((c) => c.id === selectedId);
+
+    const pickupFromListing =
+      (conv as any)?.pickup_location ??
+      (conv as any)?.pickup_location_text ??
+      "";
+
+    setMeetupPlace(pickupFromListing || "");
+  }, [selectedId, conversations]);
+
+  useEffect(() => {
+    async function load() {
       try {
+        setIsLoading(true);
         const user = await User.me();
         setCurrentUser(user);
-        const convos = await Conversation.filter({ participant_ids: { op: 'contains', value: user.id! } }, '-last_message_at');
-        setConversations(convos);
-        
-        const conversationIdFromUrl = searchParams.get('conversationId');
-        if (conversationIdFromUrl) {
-          setSelectedConversationId(conversationIdFromUrl);
-        } else if (convos.length > 0) {
-          setSelectedConversationId(convos[0].id || null);
+
+        const all = await Conversation.filter({}, "-last_message_at");
+        const mine = all.filter((c) =>
+          c.participant_ids?.includes(user.id!)
+        );
+
+        setConversations(mine);
+        if (mine.length > 0) {
+          const firstId = mine[0].id ?? null;
+          setSelectedId(firstId);
         }
-      } catch (error) {
-        console.error("Error loading messages:", error);
       } finally {
         setIsLoading(false);
       }
     }
-    fetchData();
-  }, [searchParams]);
 
-  const selectedConversation = conversations.find(c => c.id === selectedConversationId);
+    load();
+  }, []);
+
+  useEffect(() => {
+    async function loadMessages() {
+      if (!selectedId) {
+        setMessages([]);
+        return;
+      }
+      const result = await Message.filter(
+        { conversation_id: selectedId },
+        "created_date"
+      );
+      setMessages(result ?? []);
+    }
+
+    loadMessages();
+  }, [selectedId]);
+
+  const handleSend = async () => {
+    if (!newMessage.trim() || !currentUser || !selectedId) return;
+
+    const created = await Message.create({
+      conversation_id: selectedId,
+      sender_id: currentUser.id!,
+      content: newMessage,
+    });
+
+    setMessages((prev) => [...prev, created]);
+    setNewMessage("");
+  };
+
+  if (isLoading) {
+    return (
+      <div style={{ padding: 40 }}>
+        Loading conversations...
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <div style={{ padding: 40 }}>
+        Could not load current user.
+      </div>
+    );
+  }
+
+  const selectedConversation = conversations.find(
+    (c) => c.id === selectedId
+  );
 
   return (
-    <div className="h-full p-0 md:p-6 bg-gradient-to-b from-white to-neutral-50">
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.5 }}
-        className="h-full"
+    <div
+      style={{
+        padding: 24,
+        display: "grid",
+        gridTemplateColumns: "280px 1fr",
+        gap: 16,
+        height: "100%",
+        boxSizing: "border-box",
+      }}
+    >
+      {/* Left: conversation list */}
+      <div
+        style={{
+          borderRight: "1px solid #e5e5e5",
+          paddingRight: 16,
+          overflowY: "auto",
+        }}
       >
-        <Card className="h-full grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 overflow-hidden border-0 md:border md:border-neutral-200/60 md:rounded-2xl">
-          <div className="col-span-1 border-r border-neutral-200/60">
-            {isLoading ? <Skeleton className="h-full w-full" /> : 
-              <ConversationList 
-                conversations={conversations} 
-                onSelect={setSelectedConversationId}
-                selectedId={selectedConversationId}
-                currentUser={currentUser}
+        <h2 style={{ fontWeight: 700, marginBottom: 16 }}>Inbox</h2>
+        {conversations.length === 0 && (
+          <div style={{ color: "#666", fontSize: 14 }}>
+            No conversations yet.
+          </div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {conversations.map((c) => {
+            const otherId =
+              c.participant_ids?.find((id) => id !== currentUser.id) ??
+              "Student";
+            const name = `User ${otherId.substring(0, 4)}`;
+            const isSelected = c.id === selectedId;
+
+            // Simple mock status based on isCompleted/hasLeftReview – per conversation
+            // For now, we only show status for the selected conversation
+            let statusText = "In progress";
+            if (isSelected && isCompleted) {
+              if (hasLeftReview && otherHasLeftReview) {
+                statusText = "Reviews exchanged";
+              } else if (hasLeftReview) {
+                statusText = "Waiting for other person";
+              } else {
+                statusText = "Completed — review pending";
+              }
+            }
+
+            return (
+              <button
+                key={c.id}
+                onClick={() => setSelectedId(c.id!)}
+                style={{
+                  textAlign: "left",
+                  padding: "8px 10px",
+                  borderRadius: 10,
+                  border: "1px solid #eee",
+                  backgroundColor: isSelected ? "#fee2e2" : "#fff",
+                  cursor: "pointer",
+                }}
+              >
+                <div
+                  style={{
+                    fontWeight: 600,
+                    marginBottom: 4,
+                    fontSize: 14,
+                  }}
+                >
+                  {name}
+                </div>
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: "#666",
+                    marginBottom: 2,
+                  }}
+                >
+                  {c.item_title ?? "Item"}
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "#999",
+                    marginBottom: 2,
+                  }}
+                >
+                  {c.last_message_snippet ?? ""}
+                </div>
+                {isSelected && (
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "#dc2626",
+                    }}
+                  >
+                    {statusText}
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Right: messages + meetup + review flow */}
+      <div
+        style={{
+          paddingLeft: 8,
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          boxSizing: "border-box",
+        }}
+      >
+        {selectedConversation ? (
+          <>
+            <div style={{ marginBottom: 16 }}>
+              <h3
+                style={{
+                  fontSize: 20,
+                  fontWeight: 700,
+                  marginBottom: 4,
+                }}
+              >
+                {selectedConversation.item_title ?? "Conversation"}
+              </h3>
+              <p style={{ color: "#666", fontSize: 14 }}>
+                Conversation ID: {selectedConversation.id}
+              </p>
+            </div>
+
+            {/* Meetup details (time & place) */}
+            <div
+              style={{
+                border: "1px solid #e5e5e5",
+                borderRadius: 12,
+                padding: 12,
+                marginBottom: 12,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  marginBottom: 6,
+                }}
+              >
+                Meetup details
+              </div>
+
+              {!isEditingMeetup ? (
+                <>
+                  <div style={{ fontSize: 13, marginBottom: 2 }}>
+                    Time:{" "}
+                    {meetupTime
+                      ? new Date(meetupTime).toLocaleString()
+                      : "Not set yet"}
+                  </div>
+                  <div style={{ fontSize: 13, marginBottom: 8 }}>
+                    Place: {meetupPlace || "Not set yet"}
+                  </div>
+                  <button
+                    onClick={() => {
+                      setIsEditingMeetup(true);
+                      setEditMeetupTime(
+                        meetupTime
+                          ? meetupTime.slice(0, 16) // for datetime-local
+                          : ""
+                      );
+                      setEditMeetupPlace(meetupPlace || "");
+                    }}
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: 8,
+                      border: "1px solid #dc2626",
+                      backgroundColor: "#fff",
+                      color: "#dc2626",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Set / Edit meetup
+                  </button>
+                </>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <label style={{ fontSize: 13 }}>
+                    Time
+                    <input
+                      type="datetime-local"
+                      value={editMeetupTime}
+                      onChange={(e) => setEditMeetupTime(e.target.value)}
+                      style={{
+                        display: "block",
+                        marginTop: 4,
+                        padding: "6px 8px",
+                        borderRadius: 8,
+                        border: "1px solid #e5e5e5",
+                        fontSize: 13,
+                        width: "100%",
+                      }}
+                    />
+                  </label>
+
+                  <label style={{ fontSize: 13 }}>
+                    Place
+                    <input
+                      type="text"
+                      placeholder="e.g., Warren Towers Lobby"
+                      value={editMeetupPlace}
+                      onChange={(e) => setEditMeetupPlace(e.target.value)}
+                      style={{
+                        display: "block",
+                        marginTop: 4,
+                        padding: "6px 8px",
+                        borderRadius: 8,
+                        border: "1px solid #e5e5e5",
+                        fontSize: 13,
+                        width: "100%",
+                      }}
+                    />
+                  </label>
+
+                  <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                    <button
+                      onClick={() => {
+                        if (editMeetupTime) {
+                          setMeetupTime(editMeetupTime);
+                        } else {
+                          setMeetupTime(null);
+                        }
+                        setMeetupPlace(editMeetupPlace.trim());
+                        setIsEditingMeetup(false);
+                      }}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: 8,
+                        border: "none",
+                        backgroundColor: "#dc2626",
+                        color: "#fff",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => setIsEditingMeetup(false)}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: 8,
+                        border: "1px solid #e5e5e5",
+                        backgroundColor: "#fff",
+                        color: "#444",
+                        fontSize: 13,
+                        fontWeight: 500,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Messages list */}
+            <div
+              style={{
+                flex: 1,
+                border: "1px solid #e5e5e5",
+                borderRadius: 12,
+                padding: 12,
+                overflowY: "auto",
+                marginBottom: 12,
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+              }}
+            >
+              {messages.length === 0 && (
+                <div style={{ color: "#999", fontSize: 14 }}>
+                  No messages yet. Say hi!
+                </div>
+              )}
+              {messages.map((m) => (
+                <div
+                  key={m.id}
+                  style={{
+                    display: "flex",
+                    justifyContent:
+                      m.sender_id === currentUser.id
+                        ? "flex-end"
+                        : "flex-start",
+                  }}
+                >
+                  <div
+                    style={{
+                      maxWidth: "60%",
+                      padding: "8px 10px",
+                      borderRadius: 16,
+                      backgroundColor:
+                        m.sender_id === currentUser.id
+                          ? "#dc2626"
+                          : "#e5e5e5",
+                      color:
+                        m.sender_id === currentUser.id ? "#fff" : "#111",
+                      fontSize: 14,
+                    }}
+                  >
+                    {m.content}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Input + send */}
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+              }}
+            >
+              <input
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSend();
+                }}
+                placeholder="Type your message..."
+                style={{
+                  flex: 1,
+                  padding: "8px 10px",
+                  borderRadius: 999,
+                  border: "1px solid #e5e5e5",
+                  fontSize: 14,
+                }}
               />
-            }
+              <button
+                onClick={handleSend}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: 999,
+                  border: "none",
+                  backgroundColor: "#dc2626",
+                  color: "#fff",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontSize: 14,
+                }}
+              >
+                Send
+              </button>
+            </div>
+
+            {/* Mock: transaction complete + 5-star review */}
+            <div style={{ marginTop: 16 }}>
+              {/* Step 1: mark as completed */}
+              {!isCompleted && (
+                <div
+                  style={{
+                    border: "1px solid #e5e5e5",
+                    padding: 12,
+                    borderRadius: 12,
+                    marginBottom: 12,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 14,
+                      color: "#444",
+                      marginBottom: 8,
+                    }}
+                  >
+                    Mark this transaction as complete to leave a review.
+                  </div>
+                  <button
+                    onClick={() => {
+                      setIsCompleted(true);
+                      // In real implementation, this would update Transaction in backend
+                    }}
+                    style={{
+                      padding: "8px 14px",
+                      backgroundColor: "#dc2626",
+                      color: "white",
+                      borderRadius: 8,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Mark as Completed
+                  </button>
+                </div>
+              )}
+
+              {/* Step 2: leave review after completion */}
+              {isCompleted && !hasLeftReview && (
+                <div
+                  style={{
+                    border: "1px solid #e5e5e5",
+                    padding: 12,
+                    borderRadius: 12,
+                    marginBottom: 12,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 14,
+                      color: "#444",
+                      marginBottom: 8,
+                    }}
+                  >
+                    How was your experience? Leave a short review.
+                  </div>
+
+                  {/* Stars */}
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 4,
+                      marginBottom: 8,
+                    }}
+                  >
+                    {[1, 2, 3, 4, 5].map((r) => (
+                      <button
+                        key={r}
+                        onClick={() => setRating(r)}
+                        style={{
+                          fontSize: 20,
+                          color:
+                            rating !== null && r <= rating
+                              ? "#facc15"
+                              : "#ccc",
+                          cursor: "pointer",
+                          background: "none",
+                          border: "none",
+                          padding: 0,
+                        }}
+                      >
+                        ★
+                      </button>
+                    ))}
+                  </div>
+
+                  <textarea
+                    placeholder="Write a short comment (optional)"
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    style={{
+                      width: "100%",
+                      minHeight: 60,
+                      padding: 8,
+                      borderRadius: 8,
+                      border: "1px solid #e5e5e5",
+                      fontSize: 13,
+                      marginBottom: 8,
+                      resize: "vertical",
+                    }}
+                  />
+
+                  <button
+                    onClick={() => {
+                      if (!rating) return;
+                      setHasLeftReview(true);
+                      // In real implementation, this would create a Review in backend
+                    }}
+                    style={{
+                      padding: "8px 14px",
+                      backgroundColor: "#dc2626",
+                      color: "white",
+                      borderRadius: 8,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Submit Review
+                  </button>
+                </div>
+              )}
+
+              {/* Step 3: waiting for the other person's review */}
+              {isCompleted && hasLeftReview && !otherHasLeftReview && (
+                <div
+                  style={{
+                    border: "1px solid #e5e5e5",
+                    padding: 12,
+                    borderRadius: 12,
+                    marginBottom: 12,
+                    fontSize: 14,
+                    color: "#555",
+                    backgroundColor: "#fffbe6",
+                  }}
+                >
+                  You left a review. The other person can now review you.
+                </div>
+              )}
+
+              {/* Step 4: both reviews done (for demo, you can manually toggle otherHasLeftReview in code) */}
+              {isCompleted && hasLeftReview && otherHasLeftReview && (
+                <div
+                  style={{
+                    border: "1px solid #a3e635",
+                    padding: 12,
+                    borderRadius: 12,
+                    backgroundColor: "#ecfccb",
+                    color: "#3f6212",
+                    fontWeight: 600,
+                  }}
+                >
+                  Reviews exchanged for this transaction.
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div style={{ color: "#666", paddingTop: 40 }}>
+            Select a conversation from the left.
           </div>
-          <div className="hidden md:block md:col-span-2 lg:col-span-3">
-            {isLoading ? <Skeleton className="h-full w-full" /> : 
-              <MessageView conversation={selectedConversation} currentUser={currentUser} />
-            }
-          </div>
-        </Card>
-      </motion.div>
+        )}
+      </div>
     </div>
   );
 }
-
