@@ -1,8 +1,9 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { FormEvent } from "react";
 import type { Route } from "./+types/sell";
 import { Item } from "@/entities";
 import type { Item as ItemType } from "@/entities/Item";
+import type { User as UserType } from "@/entities/User";
 import { useNavigate } from "react-router";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -60,6 +61,23 @@ export default function Sell() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [currentUser, setCurrentUser] = useState<UserType | null>(null);
+
+  // Load current user from localStorage
+  useEffect(() => {
+    const storedUser = localStorage.getItem("currentUser");
+    if (storedUser) {
+      try {
+        const user = JSON.parse(storedUser) as UserType;
+        setCurrentUser(user);
+      } catch (error) {
+        console.error("Error parsing stored user:", error);
+      }
+    } else {
+      // If not logged in, redirect to login page
+      navigate(createPageUrl("Login"));
+    }
+  }, [navigate]);
   
   const [formData, setFormData] = useState<FormData>({
     title: "",
@@ -116,6 +134,14 @@ export default function Sell() {
     setIsSubmitting(true);
 
     try {
+      // Check if user is logged in
+      if (!currentUser || !currentUser.id) {
+        alert("Please log in to create a listing");
+        navigate(createPageUrl("Login"));
+        setIsSubmitting(false);
+        return;
+      }
+
       // Validate required fields
       if (!formData.category || !formData.condition) {
         alert("Please select both category and condition");
@@ -123,14 +149,14 @@ export default function Sell() {
         return;
       }
 
-      // Prepare data for backend - only include required fields and valid values
+      // Prepare data for backend - use the actual logged-in user's ID
       const itemData = {
         title: formData.title,
         description: formData.description,
         price: parseFloat(formData.price),
         category: formData.category,
         condition: formData.condition,
-        seller_id: "current_user",
+        seller_id: currentUser.id, // Use actual user ID from localStorage
         location: formData.location || undefined,
         is_negotiable: formData.is_negotiable,
       };
@@ -140,10 +166,22 @@ export default function Sell() {
       navigate(createPageUrl("Home"));
     } catch (error) {
       console.error("Error creating item:", error);
+      alert(error instanceof Error ? error.message : "Failed to create listing. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  // Show loading state while checking user
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-white to-neutral-50 p-6 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-neutral-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-neutral-50 p-6">
