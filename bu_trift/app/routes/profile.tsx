@@ -3,13 +3,13 @@ import type { Route } from "./+types/profile";
 import { User, Item } from "@/entities";
 import type { User as UserType } from "@/entities/User";
 import type { Item as ItemType } from "@/entities/Item";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Star, Edit3, Package } from "lucide-react";
+import { Star, Edit3, Package, User as UserIcon, LogIn, UserPlus } from "lucide-react";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -79,9 +79,11 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function Profile() {
+  const navigate = useNavigate();
   const [user, setUser] = useState<UserType | null>(null);
   const [userItems, setUserItems] = useState<ItemType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     loadUserData();
@@ -96,6 +98,7 @@ export default function Profile() {
         try {
           const currentUser = JSON.parse(storedUser) as UserType;
           setUser(currentUser);
+          setIsLoggedIn(true);
           
           // Load user's items if user has an ID
           if (currentUser.id) {
@@ -104,22 +107,15 @@ export default function Profile() {
           }
         } catch (parseError) {
           console.error("Error parsing stored user:", parseError);
-          // If parsing fails, try using mock data as fallback
-          const currentUser = await User.me();
-          setUser(currentUser);
+          setIsLoggedIn(false);
         }
       } else {
-        // No user logged in - use mock data as fallback
-        const currentUser = await User.me();
-        setUser(currentUser);
-        
-        if (currentUser.id) {
-          const items = await Item.filter({ seller_id: currentUser.id }, "-created_date");
-          setUserItems(items);
-        }
+        // No user logged in
+        setIsLoggedIn(false);
       }
     } catch (error) {
       console.error("Error loading user data:", error);
+      setIsLoggedIn(false);
     } finally {
       setIsLoading(false);
     }
@@ -131,6 +127,67 @@ export default function Profile() {
         <div className="max-w-4xl mx-auto space-y-6">
           <Skeleton className="h-48 w-full rounded-xl" />
           <Skeleton className="h-64 w-full rounded-xl" />
+        </div>
+      </div>
+    );
+  }
+
+  // Show login prompt if user is not logged in
+  if (!isLoggedIn || !user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-white to-neutral-50 p-6">
+        <div className="max-w-2xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <Card className="shadow-2xl border-0">
+              <CardContent className="p-12 text-center">
+                <div className="mx-auto w-20 h-20 bg-gradient-to-br from-red-100 to-red-200 rounded-full flex items-center justify-center mb-6">
+                  <UserIcon className="w-10 h-10 text-red-600" />
+                </div>
+                
+                <h1 className="text-3xl font-bold text-neutral-900 mb-4">
+                  Welcome to BUTrift
+                </h1>
+                
+                <p className="text-lg text-neutral-600 mb-8 max-w-md mx-auto">
+                  Please sign in to view your profile, manage your listings, and track your sales.
+                </p>
+
+                <div className="flex flex-col sm:flex-row gap-4 justify-center max-w-md mx-auto">
+                  <Link to={createPageUrl("Login")} className="flex-1">
+                    <Button className="w-full h-12 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-semibold text-lg shadow-lg">
+                      <LogIn className="w-5 h-5 mr-2" />
+                      Sign In
+                    </Button>
+                  </Link>
+                  
+                  <Link to={createPageUrl("Register")} className="flex-1">
+                    <Button 
+                      variant="outline" 
+                      className="w-full h-12 border-red-200 text-red-700 hover:bg-red-50 font-semibold text-lg"
+                    >
+                      <UserPlus className="w-5 h-5 mr-2" />
+                      Create Account
+                    </Button>
+                  </Link>
+                </div>
+
+                <div className="mt-8 pt-8 border-t border-neutral-200">
+                  <p className="text-sm text-neutral-500 mb-4">
+                    Don't have an account yet?
+                  </p>
+                  <Link to={createPageUrl("Register")}>
+                    <Button variant="ghost" className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                      Join BUTrift for free
+                    </Button>
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
         </div>
       </div>
     );
