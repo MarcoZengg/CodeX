@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Star, Calendar, Package, Edit3 } from "lucide-react";
+import { Star, Edit3, Package } from "lucide-react";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -89,11 +89,35 @@ export default function Profile() {
 
   const loadUserData = async () => {
     try {
-      const currentUser = await User.me();
-      setUser(currentUser);
+      // Get user from localStorage (stored after login/register)
+      const storedUser = localStorage.getItem("currentUser");
       
-      const items = await Item.filter({ seller_id: currentUser.id! }, "-created_date");
-      setUserItems(items);
+      if (storedUser) {
+        try {
+          const currentUser = JSON.parse(storedUser) as UserType;
+          setUser(currentUser);
+          
+          // Load user's items if user has an ID
+          if (currentUser.id) {
+            const items = await Item.filter({ seller_id: currentUser.id }, "-created_date");
+            setUserItems(items);
+          }
+        } catch (parseError) {
+          console.error("Error parsing stored user:", parseError);
+          // If parsing fails, try using mock data as fallback
+          const currentUser = await User.me();
+          setUser(currentUser);
+        }
+      } else {
+        // No user logged in - use mock data as fallback
+        const currentUser = await User.me();
+        setUser(currentUser);
+        
+        if (currentUser.id) {
+          const items = await Item.filter({ seller_id: currentUser.id }, "-created_date");
+          setUserItems(items);
+        }
+      }
     } catch (error) {
       console.error("Error loading user data:", error);
     } finally {
@@ -148,18 +172,6 @@ export default function Profile() {
                         {user?.display_name || "BU Student"}
                       </h1>
                       <div className="flex flex-wrap items-center gap-4 text-sm text-neutral-600">
-                        {user?.graduation_year && (
-                          <div className="flex items-center gap-1">
-                            <Calendar className="w-4 h-4" />
-                            Class of {user.graduation_year}
-                          </div>
-                        )}
-                        {user?.major && (
-                          <div className="flex items-center gap-1">
-                            <Package className="w-4 h-4" />
-                            {user.major}
-                          </div>
-                        )}
                         {user?.is_verified && (
                           <Badge className="bg-green-100 text-green-800">
                             ✓ Verified BU Student

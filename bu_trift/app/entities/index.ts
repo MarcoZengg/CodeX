@@ -2,7 +2,7 @@
 import type { Item as ItemType, ItemCategory, ItemCondition, ItemStatus } from "./Item";
 import type { Message as MessageType } from "./Message";
 import type { Conversation as ConversationType } from "./Conversation";
-import type { User as UserType } from "./User";
+import type { User as UserType, UserRegister, UserLogin } from "./User";
 
 // Import entity classes for re-export
 import { ItemEntity } from "./Item";
@@ -50,6 +50,9 @@ const ConversationService = {
 };
 
 const UserService = {
+  register: async (userData: UserRegister): Promise<UserType> => UserEntity.register(userData),
+  login: async (credentials: UserLogin): Promise<UserType> => UserEntity.login(credentials),
+  getById: async (userId: string): Promise<UserType> => UserEntity.getById(userId),
   me: async (): Promise<UserType> => UserEntity.me(),
 };
 

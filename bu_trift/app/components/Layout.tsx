@@ -1,6 +1,9 @@
 import { Link, useLocation } from "react-router";
 import { createPageUrl } from "@/utils";
-import { Home, Search, Plus, User, MessageCircle } from "lucide-react";
+import { Home, Search, Plus, User, MessageCircle, LogIn, UserPlus, LogOut } from "lucide-react";
+import { useState, useEffect } from "react";
+import type { User as UserType } from "@/entities/User";
+import { Button } from "@/components/ui/button";
 
 const navigationItems = [
   {
@@ -36,6 +39,51 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
+  const [currentUser, setCurrentUser] = useState<UserType | null>(null);
+
+  // Load user from localStorage on mount
+  useEffect(() => {
+    const storedUser = localStorage.getItem("currentUser");
+    if (storedUser) {
+      try {
+        setCurrentUser(JSON.parse(storedUser));
+      } catch (error) {
+        console.error("Error parsing stored user:", error);
+        localStorage.removeItem("currentUser");
+      }
+    }
+  }, []);
+
+  // Update user when navigating (in case login/register happens)
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const storedUser = localStorage.getItem("currentUser");
+      if (storedUser) {
+        try {
+          setCurrentUser(JSON.parse(storedUser));
+        } catch (error) {
+          console.error("Error parsing stored user:", error);
+        }
+      } else {
+        setCurrentUser(null);
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    // Also check on location change (for same-tab navigation)
+    handleStorageChange();
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, [location]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("currentUser");
+    setCurrentUser(null);
+    // Redirect to home page
+    window.location.href = createPageUrl("Home");
+  };
 
   return (
     <div className="min-h-screen flex w-full bg-gradient-to-br from-neutral-50 to-white">
@@ -73,15 +121,54 @@ export default function Layout({ children }: LayoutProps) {
         </nav>
 
         <div className="border-t border-neutral-200/60 p-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-red-100 to-red-200 rounded-full flex items-center justify-center border-2 border-red-300/20">
-              <User className="w-5 h-5 text-red-700" />
+          {currentUser ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-red-100 to-red-200 rounded-full flex items-center justify-center border-2 border-red-300/20">
+                  <User className="w-5 h-5 text-red-700" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-neutral-900 text-sm truncate">
+                    {currentUser.display_name || "BU Student"}
+                  </p>
+                  <p className="text-xs text-neutral-600 truncate">
+                    {currentUser.email || "Verified @bu.edu"}
+                  </p>
+                </div>
+              </div>
+              <Button
+                onClick={handleLogout}
+                variant="outline"
+                className="w-full border-red-200 text-red-700 hover:bg-red-50"
+                size="sm"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Logout
+              </Button>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-neutral-900 text-sm truncate">BU Student</p>
-              <p className="text-xs text-neutral-600 truncate">Verified @bu.edu</p>
+          ) : (
+            <div className="space-y-2">
+              <Link to={createPageUrl("Login")}>
+                <Button
+                  className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white"
+                  size="sm"
+                >
+                  <LogIn className="w-4 h-4 mr-2" />
+                  Sign In
+                </Button>
+              </Link>
+              <Link to={createPageUrl("Register")}>
+                <Button
+                  variant="outline"
+                  className="w-full border-red-200 text-red-700 hover:bg-red-50"
+                  size="sm"
+                >
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  Create Account
+                </Button>
+              </Link>
             </div>
-          </div>
+          )}
         </div>
       </aside>
 

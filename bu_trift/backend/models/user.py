@@ -12,8 +12,6 @@ class UserDB(Base):
     is_verified = Column(Boolean, default=False)
     profile_image_url = Column(String)
     bio = Column(String)
-    graduation_year = Column(String)
-    major = Column(String)
     rating = Column(Float, default=0.0)
     total_sales = Column(Integer, default=0)
     created_date = Column(DateTime, server_default=func.now())

@@ -1,3 +1,6 @@
+// Import API URL from config
+import { API_URL } from "../config";
+
 export interface User {
   id?: string;
   display_name?: string;
@@ -7,8 +10,6 @@ export interface User {
   total_sales?: number;
   is_verified?: boolean;
   bio?: string;
-  graduation_year?: string;
-  major?: string;
   created_date?: string;
 }
 
@@ -17,8 +18,6 @@ export interface UserRegister {
   password: string;
   display_name: string;
   bio?: string;
-  graduation_year?: string;
-  major?: string;
 }
 
 export interface UserLogin {
@@ -34,7 +33,7 @@ export class UserEntity {
    */
   static async register(userData: UserRegister): Promise<User> {
     try {
-      const response = await fetch("http://localhost:8000/api/users/register", {
+      const response = await fetch(`${API_URL}/api/users/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -61,7 +60,7 @@ export class UserEntity {
    */
   static async login(credentials: UserLogin): Promise<User> {
     try {
-      const response = await fetch("http://localhost:8000/api/users/login", {
+      const response = await fetch(`${API_URL}/api/users/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -88,7 +87,7 @@ export class UserEntity {
    */
   static async getById(userId: string): Promise<User> {
     try {
-      const response = await fetch(`http://localhost:8000/api/users/${userId}`, {
+      const response = await fetch(`${API_URL}/api/users/${userId}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -124,8 +123,6 @@ export class UserEntity {
       total_sales: 12,
       is_verified: true,
       bio: "Current BU student",
-      graduation_year: "2026",
-      major: "Computer Science",
     };
     
     // Simulate network delay for Safari compatibility

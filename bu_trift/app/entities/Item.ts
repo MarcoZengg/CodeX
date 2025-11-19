@@ -1,3 +1,6 @@
+// Import API URL from config
+import { API_URL } from "../config";
+
 export type ItemCategory =
   | "textbooks"
   | "electronics"
@@ -134,8 +137,8 @@ export class ItemEntity {
       
       const queryString = params.toString();
       const url = queryString 
-        ? `http://localhost:8000/api/items?${queryString}`
-        : 'http://localhost:8000/api/items';
+        ? `${API_URL}/api/items?${queryString}`
+        : `${API_URL}/api/items`;
       
       const response = await fetch(url);
       
@@ -198,7 +201,7 @@ export class ItemEntity {
   static async get(id: string): Promise<Item> {
     try {
       // Call FastAPI backend endpoint
-      const response = await fetch(`http://localhost:8000/api/items/${id}`);
+      const response = await fetch(`${API_URL}/api/items/${id}`);
       
       if (!response.ok) {
         throw new Error(`Failed to fetch item: ${response.statusText}`);
@@ -244,7 +247,7 @@ export class ItemEntity {
       }
 
       // Call FastAPI backend endpoint
-      const response = await fetch('http://localhost:8000/api/items', {
+      const response = await fetch(`${API_URL}/api/items`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

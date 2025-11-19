@@ -82,8 +82,6 @@ class UserRegister(BaseModel):
     password: str
     display_name: str
     bio: Optional[str] = None
-    graduation_year: Optional[str] = None
-    major: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: str
@@ -96,8 +94,6 @@ class UserResponse(BaseModel):
     is_verified: bool
     profile_image_url: Optional[str] = None
     bio: Optional[str] = None
-    graduation_year: Optional[str] = None
-    major: Optional[str] = None
     rating: float
     total_sales: int
     created_date: str
@@ -129,8 +125,6 @@ def user_to_response(user: UserDB) -> dict:
         "is_verified": user.is_verified,
         "profile_image_url": user.profile_image_url,
         "bio": user.bio,
-        "graduation_year": user.graduation_year,
-        "major": user.major,
         "rating": user.rating if user.rating else 0.0,
         "total_sales": user.total_sales if user.total_sales else 0,
         "created_date": user.created_date.isoformat() if user.created_date else datetime.now().isoformat()
@@ -220,8 +214,6 @@ def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
         password_hash=get_password_hash(user_data.password),  # Store hashed password for security
         is_verified=True,  # Auto-verify BU emails
         bio=user_data.bio,
-        graduation_year=user_data.graduation_year,
-        major=user_data.major,
         rating=0.0,
         total_sales=0,
         created_date=datetime.now()
