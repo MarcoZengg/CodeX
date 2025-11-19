@@ -62,20 +62,26 @@ According to the course requirements:
 #### Frontend Integration
 - ✅ **API Integration**: Frontend connected to FastAPI backend
 - ✅ **Item Entity**: Calls real backend API (`http://localhost:8000/api/items`)
-- ✅ **Fallback to Mock Data**: If backend unavailable, uses mock data
+- ✅ **User Entity**: Calls real backend API (Simple - no authentication yet)
+  - ✅ `User.register()` - Register new user (`POST /api/users/register`)
+  - ✅ `User.getById()` - Get public user profile (`GET /api/users/{user_id}`)
+  - ✅ `User.me()` - Returns mock user data (authentication to be added later)
+  - ✅ **Fallback to Mock Data**: If backend unavailable, uses mock data
 - ✅ **Error Handling**: Try-catch blocks for API calls
-- ⏳ **User Authentication**: Still using mock data
 - ⏳ **Messaging**: Still using mock data
 - ⏳ **Image Upload**: Not yet implemented
+- ⏳ **Authentication Flow**: To be implemented after all backend services are complete
 
 ### ⏳ Pending Implementation
 
-#### Backend Services (In Progress)
-- [ ] **User Management Service**: Authentication & profile
-  - [ ] User registration & login endpoints
-  - [ ] JWT authentication
-  - [ ] User profile CRUD
-  - [ ] Users database table
+#### Backend Services
+- ✅ **User Management Service**: Basic registration (Authentication to be added later)
+  - ✅ User registration endpoint (`POST /api/users/register`)
+  - ✅ Get user by ID (`GET /api/users/{user_id}`)
+  - ✅ Users database table (`users` table with SQLAlchemy)
+  - ✅ Password hashing with bcrypt (passwords stored securely)
+  - ✅ BU email validation (@bu.edu required)
+  - ⏳ **Authentication (JWT)**: To be implemented after all backend services are complete
 - [ ] **Messaging Service**: Real-time messaging
   - [ ] Conversations CRUD
   - [ ] Messages CRUD
@@ -86,8 +92,12 @@ According to the course requirements:
   - [ ] Image URLs in item records
 
 #### Frontend Features
-- [ ] Implement authentication flow
-- [ ] Replace remaining mock data with API calls (User, Message, Conversation)
+- ✅ User registration (calls backend API)
+- ⏳ Authentication flow (JWT tokens) - To be added after backend services complete
+- [ ] Add register UI page
+- [ ] Add login UI page (after authentication is implemented)
+- [ ] Replace Message mock data with API calls
+- [ ] Replace Conversation mock data with API calls
 - [ ] Implement image upload functionality
 - [ ] Add error handling and loading states
 
@@ -153,7 +163,8 @@ bu_trift/
 │   ├── main.py             # FastAPI app & endpoints
 │   ├── database.py         # Database connection setup
 │   ├── models/             # Database models (SQLAlchemy)
-│   │   └── item.py         # ItemDB model
+│   │   ├── item.py         # ItemDB model
+│   │   └── user.py         # UserDB model
 │   ├── butrift.db          # SQLite database (auto-generated)
 │   └── requirement.txt     # Python dependencies
 ├── public/                 # Static assets
@@ -265,16 +276,25 @@ Or use a production ASGI server like Gunicorn with Uvicorn workers.
 ### API Endpoints
 
 **Current Implemented Endpoints:**
-- `GET /` - API health check
-- `GET /api/items` - Get all items (with optional filters)
+
+**Item Endpoints:**
+- `GET /api/items` - Get all items
 - `GET /api/items/{item_id}` - Get item by ID
 - `POST /api/items` - Create new item
+
+**User Endpoints (Simple - no authentication yet):**
+- `POST /api/users/register` - Register new user (requires @bu.edu email, no authentication)
+- `GET /api/users/{user_id}` - Get public user profile by ID
+
+**Health Check:**
+- `GET /` - API health check
 - `GET /api/health` - Database health check
 
 **To Be Implemented:**
-- User endpoints (`/api/users`, `/api/auth`)
+- User authentication (JWT tokens, login endpoint)
 - Message endpoints (`/api/messages`, `/api/conversations`)
 - Image upload endpoints
+- Password reset endpoint
 
 ### Database
 
