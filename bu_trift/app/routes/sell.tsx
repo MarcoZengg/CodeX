@@ -63,7 +63,9 @@ export default function Sell() {
   const [uploadingImages, setUploadingImages] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserType | null>(null);
 
-  // Load current user from localStorage
+  // Load current user from localStorage 
+  //Purpose: remember "you're logged in" in this browser
+
   useEffect(() => {
     const storedUser = localStorage.getItem("currentUser");
     if (storedUser) {

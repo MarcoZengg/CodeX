@@ -140,9 +140,27 @@ def read_root():
     return {"message": "BUTrift API is running!"}
 
 @app.get("/api/items", response_model=List[ItemResponse])
-def get_items(db: Session = Depends(get_db)):
-    """Get all items - from database"""
-    items = db.query(ItemDB).all()
+def get_items(
+    seller_id: Optional[str] = None,
+    category: Optional[str] = None,
+    condition: Optional[str] = None,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Get items with optional filtering - from database"""
+    query = db.query(ItemDB)
+    
+    # Apply filters if provided
+    if seller_id:
+        query = query.filter(ItemDB.seller_id == seller_id)
+    if category:
+        query = query.filter(ItemDB.category == category)
+    if condition:
+        query = query.filter(ItemDB.condition == condition)
+    if status:
+        query = query.filter(ItemDB.status == status)
+    
+    items = query.all()
     return [item_to_response(item) for item in items]
 
 @app.get("/api/items/{item_id}", response_model=ItemResponse)
