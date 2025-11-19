@@ -166,9 +166,10 @@ bu_trift/
 │   │   ├── item.py         # ItemDB model
 │   │   └── user.py         # UserDB model
 │   ├── butrift.db          # SQLite database (auto-generated)
-│   └── requirement.txt     # Python dependencies
+│   └── requirement.txt     # Python dependencies (also at root)
 ├── public/                 # Static assets
 ├── package.json            # Frontend dependencies
+├── requirement.txt         # Python dependencies (also in backend/)
 ├── tsconfig.json           # TypeScript config
 ├── vite.config.ts          # Vite config
 └── README.md
@@ -197,11 +198,16 @@ npm install
 
 3. Install backend dependencies:
 ```bash
+# Option 1: From project root (recommended)
+pip install -r requirement.txt
+
+# Option 2: From backend folder
 cd backend
-pip install fastapi[standard] sqlalchemy
-# Or use the requirement file:
 pip install -r requirement.txt
 cd ..
+
+# Note: requirement.txt exists in both root and backend/ folder
+# Both contain the same dependencies
 ```
 
 ### Development
