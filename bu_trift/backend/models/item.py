@@ -1,5 +1,9 @@
 from sqlalchemy import Column, String, Float, Boolean, DateTime
 from sqlalchemy.sql import func
+from sqlalchemy.dialects.sqlite import JSON   # If using SQLite
+# If using PostgreSQL instead, use:
+# from sqlalchemy.dialects.postgresql import JSON
+
 from database import Base
 
 class ItemDB(Base):
@@ -16,3 +20,6 @@ class ItemDB(Base):
     location = Column(String)
     is_negotiable = Column(Boolean, default=False)
     created_date = Column(DateTime, server_default=func.now())
+
+    # NEW FIELD — list of image URLs
+    images = Column(JSON, nullable=True)

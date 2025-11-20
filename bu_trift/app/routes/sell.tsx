@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Upload, X, Camera, Plus, DollarSign } from "lucide-react";
 import { motion } from "framer-motion";
 import type { ItemCategory, ItemCondition } from "@/entities/Item";
+import { API_URL } from "../config"; // <-- make sure path matches your project
 
 const categories: { value: ItemCategory | ""; label: string }[] = [
   { value: "textbooks", label: "Textbooks" },
@@ -64,8 +65,7 @@ export default function Sell() {
   const [currentUser, setCurrentUser] = useState<UserType | null>(null);
 
   // Load current user from localStorage 
-  //Purpose: remember "you're logged in" in this browser
-
+  // Purpose: remember "you're logged in" in this browser
   useEffect(() => {
     const storedUser = localStorage.getItem("currentUser");
     if (storedUser) {
@@ -99,26 +99,36 @@ export default function Sell() {
     }));
   };
 
+  // REAL FILE UPLOAD: sends files to FastAPI /api/upload-image
   const handleFileUpload = async (files: FileList | null) => {
     if (!files) return;
+
     setUploadingImages(true);
-    const newImages: string[] = [];
+    const uploadedURLs: string[] = [];
 
     try {
-      // TODO: Implement actual file upload
-      // For now, creating placeholder URLs
       for (const file of Array.from(files)) {
-        // const { file_url } = await UploadFile({ file });
-        // newImages.push(file_url);
-        newImages.push(URL.createObjectURL(file)); // Temporary placeholder
+        const data = new FormData();
+        data.append("file", file);
+
+        const res = await fetch(`${API_URL}/api/upload-image`, {
+          method: "POST",
+          body: data,
+        });
+
+        if (!res.ok) throw new Error("Image upload failed");
+
+        const json = await res.json(); // { url: "http://localhost:8000/uploads/..." }
+        uploadedURLs.push(json.url);
       }
 
       setFormData(prev => ({
         ...prev,
-        images: [...prev.images, ...newImages]
+        images: [...prev.images, ...uploadedURLs],
       }));
     } catch (error) {
       console.error("Error uploading images:", error);
+      alert("Failed to upload image(s). Please try again.");
     } finally {
       setUploadingImages(false);
     }
@@ -151,16 +161,23 @@ export default function Sell() {
         return;
       }
 
+      if (!formData.title.trim() || !formData.description.trim() || !formData.price.trim()) {
+        alert("Please fill in all required fields");
+        setIsSubmitting(false);
+        return;
+      }
+
       // Prepare data for backend - use the actual logged-in user's ID
-      const itemData = {
+      const itemData: ItemType = {
         title: formData.title,
         description: formData.description,
         price: parseFloat(formData.price),
-        category: formData.category,
-        condition: formData.condition,
-        seller_id: currentUser.id, // Use actual user ID from localStorage
+        category: formData.category as ItemType["category"],
+        condition: formData.condition as ItemType["condition"],
+        seller_id: currentUser.id,
         location: formData.location || undefined,
         is_negotiable: formData.is_negotiable,
+        images: formData.images,
       };
 
       await Item.create(itemData);
@@ -240,7 +257,10 @@ export default function Sell() {
                 <div className="grid md:grid-cols-2 gap-6">
                   <div>
                     <Label htmlFor="category">Category</Label>
-                    <Select value={formData.category} onValueChange={(value) => handleInputChange('category', value)}>
+                    <Select
+                      value={formData.category}
+                      onValueChange={(value) => handleInputChange('category', value as ItemCategory)}
+                    >
                       <SelectTrigger className="mt-2">
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
@@ -256,7 +276,10 @@ export default function Sell() {
 
                   <div>
                     <Label htmlFor="condition">Condition</Label>
-                    <Select value={formData.condition} onValueChange={(value) => handleInputChange('condition', value)}>
+                    <Select
+                      value={formData.condition}
+                      onValueChange={(value) => handleInputChange('condition', value as ItemCondition)}
+                    >
                       <SelectTrigger className="mt-2">
                         <SelectValue placeholder="Select condition" />
                       </SelectTrigger>
@@ -413,4 +436,3 @@ export default function Sell() {
     </div>
   );
 }
-

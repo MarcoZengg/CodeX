@@ -1,5 +1,6 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Optional
 from sqlalchemy.orm import Session
@@ -9,6 +10,7 @@ from models.user import UserDB
 import bcrypt
 import uuid
 from datetime import datetime
+import os
 
 # Password hashing (simple - no JWT authentication for now)
 # Using bcrypt directly instead of passlib for better compatibility
@@ -33,10 +35,13 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 app = FastAPI()
 
+# Serve uploaded images from /uploads
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 # Create tables
 Base.metadata.create_all(bind=engine)
 
-origins=[
+origins = [
     "http://localhost:5173",
     "http://localhost:5174",
     "http://localhost:5175",
@@ -62,6 +67,8 @@ class ItemCreate(BaseModel):
     seller_id: str
     location: Optional[str] = None
     is_negotiable: bool = False
+    images: Optional[List[str]] = []   # NEW: list of image URLs
+
 
 class ItemResponse(BaseModel):
     id: str
@@ -75,6 +82,8 @@ class ItemResponse(BaseModel):
     location: Optional[str] = None
     is_negotiable: bool
     created_date: str
+    images: Optional[List[str]] = []   # NEW: include images in response
+
 
 # User Pydantic models
 class UserRegister(BaseModel):
@@ -112,7 +121,8 @@ def item_to_response(item: ItemDB) -> dict:
         "status": item.status,
         "location": item.location,
         "is_negotiable": item.is_negotiable,
-        "created_date": item.created_date.isoformat() if item.created_date else datetime.now().isoformat()
+        "created_date": item.created_date.isoformat() if item.created_date else datetime.now().isoformat(),
+        "images": item.images or [],   # NEW: images from DB
     }
 
 # Helper function to convert UserDB to response format
@@ -133,6 +143,30 @@ def user_to_response(user: UserDB) -> dict:
 def validate_bu_email(email: str) -> bool:
     """Validate that email ends with @bu.edu"""
     return email.lower().endswith("@bu.edu")
+
+# ==========================
+# Image Upload Endpoint
+# ==========================
+@app.post("/api/upload-image")
+async def upload_image(file: UploadFile = File(...)):
+    """
+    Upload a single image file and return its public URL.
+    Files are stored in the local 'uploads' directory.
+    """
+    upload_dir = "uploads"
+    os.makedirs(upload_dir, exist_ok=True)
+
+    # Use original filename (you could also randomize this)
+    file_path = os.path.join(upload_dir, file.filename)
+
+    # Save file to disk
+    with open(file_path, "wb") as f:
+        f.write(await file.read())
+
+    # Serve via /uploads route
+    url = f"http://localhost:8000/uploads/{file.filename}"
+
+    return {"url": url}
 
 # API Endpoints
 @app.get("/")
@@ -185,7 +219,8 @@ def create_item(item: ItemCreate, db: Session = Depends(get_db)):
         status="available",
         location=item.location,
         is_negotiable=item.is_negotiable,
-        created_date=datetime.now()
+        created_date=datetime.now(),
+        images=item.images or [],   # NEW: save image URLs to DB
     )
     
     db.add(new_item)
