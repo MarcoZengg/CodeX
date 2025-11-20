@@ -208,6 +208,7 @@ def get_item(item_id: str, db: Session = Depends(get_db)):
 @app.post("/api/items", response_model=ItemResponse)
 def create_item(item: ItemCreate, db: Session = Depends(get_db)):
     """Create new item - save to database"""
+    print(f"DEBUG: Received images: {item.images}")  # Debug log
     new_item = ItemDB(
         id=str(uuid.uuid4()),
         title=item.title,
@@ -220,8 +221,9 @@ def create_item(item: ItemCreate, db: Session = Depends(get_db)):
         location=item.location,
         is_negotiable=item.is_negotiable,
         created_date=datetime.now(),
-        images=item.images or [],   # NEW: save image URLs to DB
+        images=item.images if item.images else [],   # NEW: save image URLs to DB
     )
+    print(f"DEBUG: Saving to DB with images: {new_item.images}")  # Debug log
     
     db.add(new_item)
     db.commit()

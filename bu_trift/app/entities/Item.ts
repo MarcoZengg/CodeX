@@ -245,6 +245,14 @@ export class ItemEntity {
       if (data.is_negotiable !== undefined) {
         requestBody.is_negotiable = data.is_negotiable;
       }
+      // Include images array (can be empty array)
+      if (data.images !== undefined) {
+        requestBody.images = data.images;
+      } else {
+        requestBody.images = [];  // Default to empty array if not provided
+      }
+
+      console.log("Sending to backend - images:", requestBody.images); // Debug log
 
       // Call FastAPI backend endpoint
       const response = await fetch(`${API_URL}/api/items`, {

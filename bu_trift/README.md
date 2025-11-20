@@ -22,9 +22,9 @@ According to the course requirements:
 
 #### Frontend (React + TypeScript)
 - **Home Page**: Hero section, featured items, category grid, community stats
-- **Browse Page**: Item listing with filtering, sorting, and search functionality
-- **Item Details Page**: Detailed item view with image gallery and seller information
-- **Sell Page**: Form to create new listings
+- **Browse Page**: Item listing with filtering, sorting, and search functionality (displays item images)
+- **Item Details Page**: Detailed item view with image gallery (supports multiple images) and seller information
+- **Sell Page**: Form to create new listings with image upload
 - **Messages Page**: Conversation list and messaging interface
 - **Profile Page**: User profile with listings and stats
 
@@ -57,7 +57,7 @@ According to the course requirements:
 #### Database
 - ✅ **SQLite Database**: `butrift.db` file (auto-generated)
 - ✅ **Items Table**: Fully implemented with schema
-  - Columns: id, title, description, price, category, condition, seller_id, status, location, is_negotiable, created_date
+  - Columns: id, title, description, price, category, condition, seller_id, status, location, is_negotiable, created_date, images
 
 #### Frontend Integration
 - ✅ **API Integration**: Frontend connected to FastAPI backend
@@ -68,8 +68,12 @@ According to the course requirements:
   - ✅ `User.me()` - Returns mock user data (authentication to be added later)
   - ✅ **Fallback to Mock Data**: If backend unavailable, uses mock data
 - ✅ **Error Handling**: Try-catch blocks for API calls
+- ✅ **Image Upload**: Fully implemented
+  - ✅ Image upload on sell page (`POST /api/upload-image`)
+  - ✅ Images stored in `backend/uploads` directory
+  - ✅ Image URLs saved in database `images` column (JSON array)
+  - ✅ Images displayed in item cards and item details pages
 - ⏳ **Messaging**: Still using mock data
-- ⏳ **Image Upload**: Not yet implemented
 - ⏳ **Authentication Flow**: To be implemented after all backend services are complete
 
 ### ⏳ Pending Implementation
@@ -86,10 +90,11 @@ According to the course requirements:
   - [ ] Conversations CRUD
   - [ ] Messages CRUD
   - [ ] Database tables for conversations & messages
-- [ ] **Image Upload Service**: File handling
-  - [ ] Image upload endpoints
-  - [ ] Image storage (local or cloud)
-  - [ ] Image URLs in item records
+- ✅ **Image Upload Service**: Fully implemented
+  - ✅ Image upload endpoint (`POST /api/upload-image`)
+  - ✅ Image storage (local `backend/uploads` directory)
+  - ✅ Image URLs stored in item records (`images` JSON column)
+  - ✅ Static file serving (`/uploads` route)
 
 #### Frontend Features
 - ✅ User registration (calls backend API)
@@ -98,7 +103,7 @@ According to the course requirements:
 - [ ] Add login UI page (after authentication is implemented)
 - [ ] Replace Message mock data with API calls
 - [ ] Replace Conversation mock data with API calls
-- [ ] Implement image upload functionality
+- ✅ Implement image upload functionality (complete)
 - [ ] Add error handling and loading states
 
 #### Testing
@@ -165,6 +170,7 @@ bu_trift/
 │   ├── models/             # Database models (SQLAlchemy)
 │   │   ├── item.py         # ItemDB model
 │   │   └── user.py         # UserDB model
+│   ├── uploads/            # Uploaded images (auto-generated)
 │   ├── butrift.db          # SQLite database (auto-generated)
 │   └── requirement.txt     # Python dependencies (also at root)
 ├── public/                 # Static assets
@@ -267,7 +273,11 @@ Or use a production ASGI server like Gunicorn with Uvicorn workers.
 - **Item Entity** (`app/entities/Item.ts`)
   - `Item.filter()` - Calls `GET /api/items` (with fallback to mock data)
   - `Item.get()` - Calls `GET /api/items/{id}` (with fallback to mock data)
-  - `Item.create()` - Calls `POST /api/items` to create items in database
+  - `Item.create()` - Calls `POST /api/items` to create items in database (with image support)
+- **Image Upload** (`app/routes/sell.tsx`)
+  - `handleFileUpload()` - Uploads images to `POST /api/upload-image`
+  - Images saved to `backend/uploads` directory
+  - Image URLs stored in database and displayed in item views
 
 #### ⏳ Still Using Mock Data
 - **User Entity** (`app/entities/User.ts`)
@@ -284,22 +294,26 @@ Or use a production ASGI server like Gunicorn with Uvicorn workers.
 **Current Implemented Endpoints:**
 
 **Item Endpoints:**
-- `GET /api/items` - Get all items
+- `GET /api/items` - Get all items (supports filtering by seller_id, category, condition, status)
 - `GET /api/items/{item_id}` - Get item by ID
-- `POST /api/items` - Create new item
+- `POST /api/items` - Create new item (with images support)
 
 **User Endpoints (Simple - no authentication yet):**
 - `POST /api/users/register` - Register new user (requires @bu.edu email, no authentication)
+- `POST /api/users/login` - Login user (verifies email and password)
 - `GET /api/users/{user_id}` - Get public user profile by ID
+
+**Image Upload Endpoints:**
+- `POST /api/upload-image` - Upload a single image file (returns URL)
+- `GET /uploads/{filename}` - Serve uploaded images (static files)
 
 **Health Check:**
 - `GET /` - API health check
 - `GET /api/health` - Database health check
 
 **To Be Implemented:**
-- User authentication (JWT tokens, login endpoint)
+- User authentication (JWT tokens)
 - Message endpoints (`/api/messages`, `/api/conversations`)
-- Image upload endpoints
 - Password reset endpoint
 
 ### Database
@@ -323,12 +337,7 @@ The SQLite database (`backend/butrift.db`) is automatically created when you fir
    - Add messaging endpoints
    - Update frontend entities to call API
 
-3. **Add Image Upload**
-   - Implement file upload endpoints
-   - Store images (local or cloud storage)
-   - Update Item model to include image URLs
-
-4. **Testing**
+3. **Testing**
    - Write unit tests for backend models
    - Write integration tests for API endpoints
    - Write frontend component tests

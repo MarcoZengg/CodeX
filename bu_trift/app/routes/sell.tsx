@@ -177,9 +177,10 @@ export default function Sell() {
         seller_id: currentUser.id,
         location: formData.location || undefined,
         is_negotiable: formData.is_negotiable,
-        images: formData.images,
+        images: formData.images || [], // Ensure images is always an array
       };
 
+      console.log("Creating item with images:", itemData.images); // Debug log
       await Item.create(itemData);
 
       navigate(createPageUrl("Home"));
