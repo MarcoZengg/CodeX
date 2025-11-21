@@ -50,15 +50,15 @@ export default function ItemDetail({ params }: Route.ComponentProps) {
     setIsLoading(true);
     try {
       const itemData = await Item.get(id);
+      const userData = await User.getById(itemData.seller_id);
       setItem(itemData);
       if (itemData.seller_id) {
-        // In a real scenario, you'd fetch the seller. For now, we'll mock it.
         const sellerData = {
           id: itemData.seller_id,
-          display_name: itemData.seller_id === 'student1' ? 'Jane Doe' : 'John Smith',
-          profile_image_url: '',
-          rating: 4.8,
-          total_sales: 12,
+          display_name: userData.display_name,
+          profile_image_url: userData.profile_image_url,
+          rating: userData.rating,
+          total_sales: userData.total_sales,
           is_verified: true,
         };
         setSeller(sellerData);
