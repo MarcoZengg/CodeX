@@ -51,7 +51,8 @@ export default function Items() {
   const [isLoading, setIsLoading] = useState(true);
 
   const filterAndSortItems = useCallback(() => {
-    let filtered = items;
+    // Create a copy of items array to avoid mutating the original
+    let filtered = [...items];
 
     // Filter by search query
     if (searchQuery.trim()) {
@@ -69,17 +70,21 @@ export default function Items() {
     // Sort items
     switch (sortBy) {
       case "price_low":
-        filtered.sort((a, b) => a.price - b.price);
+        // Low to High: ascending order (a - b)
+        filtered.sort((a, b) => Number(a.price) - Number(b.price));
         break;
       case "price_high":
-        filtered.sort((a, b) => b.price - a.price);
+        // High to Low: descending order (b - a)
+        filtered.sort((a, b) => Number(b.price) - Number(a.price));
         break;
       case "newest":
+        // Newest First: descending order (b - a)
         filtered.sort((a, b) => 
           new Date(b.created_date || 0).getTime() - new Date(a.created_date || 0).getTime()
         );
         break;
       case "oldest":
+        // Oldest First: ascending order (a - b)
         filtered.sort((a, b) => 
           new Date(a.created_date || 0).getTime() - new Date(b.created_date || 0).getTime()
         );

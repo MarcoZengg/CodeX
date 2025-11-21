@@ -59,7 +59,7 @@ export default function ItemDetail({ params }: Route.ComponentProps) {
           profile_image_url: userData.profile_image_url,
           rating: userData.rating,
           total_sales: userData.total_sales,
-          is_verified: true,
+          is_verified: userData.is_verified,
         };
         setSeller(sellerData);
       }

@@ -63,6 +63,7 @@ export default function Sell() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserType | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
 
   // Load current user from localStorage 
   // Purpose: remember "you're logged in" in this browser
@@ -126,6 +127,9 @@ export default function Sell() {
         ...prev,
         images: [...prev.images, ...uploadedURLs],
       }));
+      
+      // Clear image error when images are successfully uploaded
+      setImageError(null);
     } catch (error) {
       console.error("Error uploading images:", error);
       alert("Failed to upload image(s). Please try again.");
@@ -135,10 +139,20 @@ export default function Sell() {
   };
 
   const removeImage = (indexToRemove: number) => {
-    setFormData(prev => ({
-      ...prev,
-      images: prev.images.filter((_, index) => index !== indexToRemove)
-    }));
+    setFormData(prev => {
+      const newImages = prev.images.filter((_, index) => index !== indexToRemove);
+      // If removing the last image, show error
+      if (newImages.length === 0) {
+        setImageError("Please upload at least one photo for your listing.");
+      } else {
+        // Clear error if images remain
+        setImageError(null);
+      }
+      return {
+        ...prev,
+        images: newImages
+      };
+    });
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -166,6 +180,21 @@ export default function Sell() {
         setIsSubmitting(false);
         return;
       }
+
+      // Validate that at least one image is uploaded
+      if (!formData.images || formData.images.length === 0) {
+        setImageError("Please upload at least one photo for your listing.");
+        setIsSubmitting(false);
+        // Scroll to image upload section
+        const imageSection = document.getElementById("image-upload-section");
+        if (imageSection) {
+          imageSection.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        return;
+      }
+
+      // Clear image error if images are present
+      setImageError(null);
 
       // Prepare data for backend - use the actual logged-in user's ID
       const itemData: ItemType = {
@@ -353,6 +382,7 @@ export default function Sell() {
 
           {/* Image Upload */}
           <motion.div
+            id="image-upload-section"
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
@@ -361,10 +391,19 @@ export default function Sell() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Camera className="w-5 h-5 text-blue-600" />
-                  Photos
+                  Photos <span className="text-red-600">*</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
+                {imageError && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg"
+                  >
+                    <p className="text-red-700 text-sm font-medium">{imageError}</p>
+                  </motion.div>
+                )}
                 <input
                   ref={fileInputRef}
                   type="file"
