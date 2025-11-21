@@ -35,6 +35,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 app = FastAPI()
 
+# Create uploads directory if it doesn't exist
+upload_dir = "uploads"
+os.makedirs(upload_dir, exist_ok=True)
+
 # Serve uploaded images from /uploads
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 

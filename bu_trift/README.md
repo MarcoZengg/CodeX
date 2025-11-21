@@ -320,6 +320,8 @@ Or use a production ASGI server like Gunicorn with Uvicorn workers.
 
 The SQLite database (`backend/butrift.db`) is automatically created when you first run the backend server. All created items are persisted in this file.
 
+**Note**: The `backend/uploads/` directory for storing uploaded images is also automatically created when the backend server starts. You don't need to create it manually.
+
 **Viewing the Database:**
 - Use SQLite browser tools (DB Browser for SQLite)
 - Use Python: `import sqlite3; conn = sqlite3.connect('backend/butrift.db')`
