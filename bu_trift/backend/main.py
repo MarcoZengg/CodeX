@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from database import get_db, engine, Base
 from models.item import ItemDB
 from models.user import UserDB
+from models.conversation import ConversationDB
+from models.message import MessageDB
 import bcrypt
 import uuid
 from datetime import datetime
@@ -111,6 +113,39 @@ class UserResponse(BaseModel):
     total_sales: int
     created_date: str
 
+
+# Conversation Pydantic models
+class ConversationCreate(BaseModel):
+    participant1_id: str  # Current user
+    participant2_id: str  # Other user
+    item_id: Optional[str] = None  # Optional: item being discussed
+
+class ConversationResponse(BaseModel):
+    id: str
+    participant1_id: str
+    participant2_id: str
+    item_id: Optional[str]
+    last_message_at: Optional[str]
+    created_date: str
+    updated_date: str
+
+# Message Pydantic models
+class MessageCreate(BaseModel):
+    conversation_id: str
+    sender_id: str
+    content: str
+
+class MessageResponse(BaseModel):
+    id: str
+    conversation_id: str
+    sender_id: str
+    content: str
+    is_read: bool
+    created_date: str
+
+class MessageUpdate(BaseModel):
+    is_read: Optional[bool] = None
+
 # Helper function to convert ItemDB to response format
 def item_to_response(item: ItemDB) -> dict:
     """Convert ItemDB database object to response dictionary"""
@@ -142,6 +177,31 @@ def user_to_response(user: UserDB) -> dict:
         "rating": user.rating if user.rating else 0.0,
         "total_sales": user.total_sales if user.total_sales else 0,
         "created_date": user.created_date.isoformat() if user.created_date else datetime.now().isoformat()
+    }
+
+# Helper function to convert ConversationDB to response format
+def conversation_to_response(conversation: ConversationDB) -> dict:
+    """Convert ConversationDB to response dictionary"""
+    return {
+        "id": conversation.id,
+        "participant1_id": conversation.participant1_id,
+        "participant2_id": conversation.participant2_id,
+        "item_id": conversation.item_id,
+        "last_message_at": conversation.last_message_at.isoformat() if conversation.last_message_at else None,
+        "created_date": conversation.created_date.isoformat() if conversation.created_date else datetime.now().isoformat(),
+        "updated_date": conversation.updated_date.isoformat() if conversation.updated_date else datetime.now().isoformat(),
+    }
+
+# Helper function to convert MessageDB to response format
+def message_to_response(message: MessageDB) -> dict:
+    """Convert MessageDB to response dictionary"""
+    return {
+        "id": message.id,
+        "conversation_id": message.conversation_id,
+        "sender_id": message.sender_id,
+        "content": message.content,
+        "is_read": message.is_read,
+        "created_date": message.created_date.isoformat() if message.created_date else datetime.now().isoformat(),
     }
 
 def validate_bu_email(email: str) -> bool:
@@ -318,3 +378,179 @@ def get_user_profile(user_id: str, db: Session = Depends(get_db)):
             detail="User not found"
         )
     return user_to_response(user)
+
+# ==========================
+# Messaging Endpoints
+# ==========================
+
+# Conversations CRUD
+@app.post("/api/conversations", response_model=ConversationResponse)
+def create_conversation(conversation: ConversationCreate, db: Session = Depends(get_db)):
+    """Create a new conversation between two users"""
+    
+    # Check if conversation already exists between these two users
+    existing = db.query(ConversationDB).filter(
+        ((ConversationDB.participant1_id == conversation.participant1_id) &
+         (ConversationDB.participant2_id == conversation.participant2_id)) |
+        ((ConversationDB.participant1_id == conversation.participant2_id) &
+         (ConversationDB.participant2_id == conversation.participant1_id))
+    ).first()
+    
+    if existing:
+        # Return existing conversation instead of creating duplicate
+        return conversation_to_response(existing)
+    
+    # Create new conversation
+    new_conversation = ConversationDB(
+        id=str(uuid.uuid4()),
+        participant1_id=conversation.participant1_id,
+        participant2_id=conversation.participant2_id,
+        item_id=conversation.item_id,
+    )
+    
+    db.add(new_conversation)
+    db.commit()
+    db.refresh(new_conversation)
+    
+    return conversation_to_response(new_conversation)
+
+@app.get("/api/conversations", response_model=List[ConversationResponse])
+def get_conversations(user_id: str, db: Session = Depends(get_db)):
+    """Get all conversations for a specific user"""
+    conversations = db.query(ConversationDB).filter(
+        (ConversationDB.participant1_id == user_id) |
+        (ConversationDB.participant2_id == user_id)
+    ).order_by(ConversationDB.last_message_at.desc().nullslast()).all()
+    
+    return [conversation_to_response(conv) for conv in conversations]
+
+@app.get("/api/conversations/{conversation_id}", response_model=ConversationResponse)
+def get_conversation(conversation_id: str, db: Session = Depends(get_db)):
+    """Get a specific conversation by ID"""
+    conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return conversation_to_response(conversation)
+
+@app.put("/api/conversations/{conversation_id}", response_model=ConversationResponse)
+def update_conversation(
+    conversation_id: str,
+    item_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Update conversation (e.g., update item_id or last_message_at)"""
+    conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    if item_id is not None:
+        conversation.item_id = item_id
+    
+    db.commit()
+    db.refresh(conversation)
+    return conversation_to_response(conversation)
+
+@app.delete("/api/conversations/{conversation_id}")
+def delete_conversation(conversation_id: str, db: Session = Depends(get_db)):
+    """Delete a conversation and all its messages"""
+    conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    db.delete(conversation)
+    db.commit()
+    return {"message": "Conversation deleted successfully"}
+
+# Messages CRUD
+@app.post("/api/messages", response_model=MessageResponse)
+def create_message(message: MessageCreate, db: Session = Depends(get_db)):
+    """Create a new message in a conversation"""
+    
+    # Verify conversation exists
+    conversation = db.query(ConversationDB).filter(ConversationDB.id == message.conversation_id).first()
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    # Verify sender is a participant
+    if message.sender_id not in [conversation.participant1_id, conversation.participant2_id]:
+        raise HTTPException(status_code=403, detail="Sender is not a participant in this conversation")
+    
+    # Create new message
+    new_message = MessageDB(
+        id=str(uuid.uuid4()),
+        conversation_id=message.conversation_id,
+        sender_id=message.sender_id,
+        content=message.content,
+        is_read=False,
+    )
+    
+    db.add(new_message)
+    
+    # Update conversation's last_message_at
+    conversation.last_message_at = datetime.now()
+    
+    db.commit()
+    db.refresh(new_message)
+    
+    return message_to_response(new_message)
+
+@app.get("/api/messages", response_model=List[MessageResponse])
+def get_messages(conversation_id: str, db: Session = Depends(get_db)):
+    """Get all messages in a conversation"""
+    messages = db.query(MessageDB).filter(
+        MessageDB.conversation_id == conversation_id
+    ).order_by(MessageDB.created_date.asc()).all()
+    
+    return [message_to_response(msg) for msg in messages]
+
+@app.get("/api/messages/{message_id}", response_model=MessageResponse)
+def get_message(message_id: str, db: Session = Depends(get_db)):
+    """Get a specific message by ID"""
+    message = db.query(MessageDB).filter(MessageDB.id == message_id).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return message_to_response(message)
+
+@app.put("/api/messages/{message_id}", response_model=MessageResponse)
+def update_message(
+    message_id: str,
+    message_update: MessageUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update a message (e.g., mark as read)"""
+    message = db.query(MessageDB).filter(MessageDB.id == message_id).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    
+    if message_update.is_read is not None:
+        message.is_read = message_update.is_read
+    
+    db.commit()
+    db.refresh(message)
+    return message_to_response(message)
+
+@app.put("/api/conversations/{conversation_id}/mark-read")
+def mark_conversation_read(conversation_id: str, user_id: str, db: Session = Depends(get_db)):
+    """Mark all messages in a conversation as read for a specific user"""
+    messages = db.query(MessageDB).filter(
+        MessageDB.conversation_id == conversation_id,
+        MessageDB.sender_id != user_id,  # Only mark messages NOT sent by this user
+        MessageDB.is_read == False
+    ).all()
+    
+    for message in messages:
+        message.is_read = True
+    
+    db.commit()
+    return {"message": f"Marked {len(messages)} messages as read"}
+
+@app.delete("/api/messages/{message_id}")
+def delete_message(message_id: str, db: Session = Depends(get_db)):
+    """Delete a message"""
+    message = db.query(MessageDB).filter(MessageDB.id == message_id).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    
+    db.delete(message)
+    db.commit()
+    return {"message": "Message deleted successfully"}
