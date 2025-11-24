@@ -25,6 +25,7 @@ export default function Messages() {
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const wsClientRef = useRef<WebSocketClient | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
 
   // Mock meetup details (time & place) – front-end only for now
   const [meetupTime, setMeetupTime] = useState<string | null>(null);
@@ -65,77 +66,107 @@ export default function Messages() {
     async function load() {
       try {
         setIsLoading(true);
-        // Get current user from localStorage (since User.me() is still mock)
+        // Get current user from localStorage (actual logged-in user)
         const storedUser = localStorage.getItem("currentUser");
         if (storedUser) {
-          const user = JSON.parse(storedUser);
-          setCurrentUser(user);
+          try {
+            const user = JSON.parse(storedUser);
+            // Only use if it's a real user (not mock "current_user")
+            if (user.id && user.id !== "current_user") {
+              setCurrentUser(user);
 
-          // Load conversations from API
-          const conversations = await MessageEntity.getConversations(user.id);
-          // Add backward compatibility fields
-          const formattedConversations = conversations.map((conv) => ({
-            ...conv,
-            participant_ids: [conv.participant1_id, conv.participant2_id],
-          }));
-          setConversations(formattedConversations);
+              // Load conversations from API
+              const conversations = await MessageEntity.getConversations(user.id);
+              // Add backward compatibility fields
+              const formattedConversations = conversations.map((conv) => ({
+                ...conv,
+                participant_ids: [conv.participant1_id, conv.participant2_id],
+              }));
+              setConversations(formattedConversations);
 
-          // Fetch user data for all other participants
-          const otherParticipantIds = new Set<string>();
-          formattedConversations.forEach((conv) => {
-            if (conv.participant1_id !== user.id) {
-              otherParticipantIds.add(conv.participant1_id);
-            }
-            if (conv.participant2_id !== user.id) {
-              otherParticipantIds.add(conv.participant2_id);
-            }
-          });
-
-          // Fetch all participant user data
-          const userDataPromises = Array.from(otherParticipantIds).map(async (userId) => {
-            try {
-              const userData = await User.getById(userId);
-              return { userId, userData };
-            } catch (error) {
-              console.error(`Error fetching user ${userId}:`, error);
-              return { userId, userData: null };
-            }
-          });
-
-          const userDataResults = await Promise.all(userDataPromises);
-          const usersMap: Record<string, UserType> = {};
-          userDataResults.forEach(({ userId, userData }) => {
-            if (userData) {
-              usersMap[userId] = userData;
-            }
-          });
-          setParticipantUsers(usersMap);
-
-          // Connect WebSocket for real-time messaging
-          const wsClient = new WebSocketClient(user.id);
-          wsClient.connect(API_URL);
-          wsClient.onMessage((data) => {
-            if (data.type === "new_message") {
-              const newMsg = data.data;
-              setMessages((prev) => {
-                // Avoid duplicates
-                if (prev.some((m) => m.id === newMsg.id)) {
-                  return prev;
+              // Fetch user data for all other participants
+              const otherParticipantIds = new Set<string>();
+              formattedConversations.forEach((conv) => {
+                if (conv.participant1_id !== user.id) {
+                  otherParticipantIds.add(conv.participant1_id);
                 }
-                return [...prev, newMsg];
+                if (conv.participant2_id !== user.id) {
+                  otherParticipantIds.add(conv.participant2_id);
+                }
               });
-            }
-          });
-          wsClientRef.current = wsClient;
 
-          if (formattedConversations.length > 0) {
-            const firstId = formattedConversations[0].id ?? null;
-            setSelectedId(firstId);
+              // Fetch all participant user data
+              const userDataPromises = Array.from(otherParticipantIds).map(async (userId) => {
+                try {
+                  const userData = await User.getById(userId);
+                  return { userId, userData };
+                } catch (error) {
+                  console.error(`Error fetching user ${userId}:`, error);
+                  return { userId, userData: null };
+                }
+              });
+
+              const userDataResults = await Promise.all(userDataPromises);
+              const usersMap: Record<string, UserType> = {};
+              userDataResults.forEach(({ userId, userData }) => {
+                if (userData) {
+                  usersMap[userId] = userData;
+                }
+              });
+              setParticipantUsers(usersMap);
+
+              // Connect WebSocket for real-time messaging
+              const wsClient = new WebSocketClient(user.id);
+              wsClient.connect(API_URL);
+              wsClient.onMessage((data) => {
+                if (data.type === "new_message") {
+                  const newMsg = data.data;
+                  
+                  // Update conversations list to show new message indicator
+                  setConversations((prevConvs) => {
+                    return prevConvs.map((conv) => {
+                      if (conv.id === newMsg.conversation_id) {
+                        return {
+                          ...conv,
+                          last_message_at: newMsg.created_date,
+                          last_message_snippet: newMsg.content.substring(0, 50),
+                        };
+                      }
+                      return conv;
+                    });
+                  });
+                  
+                  // Only add message if it's for the currently selected conversation
+                  setMessages((prev) => {
+                    // Check current selectedId using ref (to get latest value)
+                    if (newMsg.conversation_id !== selectedIdRef.current) {
+                      return prev; // Don't add messages from other conversations
+                    }
+                    // Avoid duplicates
+                    if (prev.some((m) => m.id === newMsg.id)) {
+                      return prev;
+                    }
+                    return [...prev, newMsg];
+                  });
+                }
+              });
+              wsClientRef.current = wsClient;
+
+              if (formattedConversations.length > 0) {
+                const firstId = formattedConversations[0].id ?? null;
+                setSelectedId(firstId);
+              }
+            } else {
+              // Invalid or mock user - set to null (user not logged in)
+              setCurrentUser(null);
+            }
+          } catch (error) {
+            console.error("Error parsing user from localStorage:", error);
+            setCurrentUser(null);
           }
         } else {
-          // Fallback to mock User.me() if no localStorage user
-          const user = await User.me();
-          setCurrentUser(user);
+          // No user in localStorage - user is not logged in
+          setCurrentUser(null);
         }
       } catch (error) {
         console.error("Error loading conversations:", error);
@@ -153,6 +184,11 @@ export default function Messages() {
       }
     };
   }, []);
+
+  // Update ref when selectedId changes
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
 
   useEffect(() => {
     async function loadMessages() {
@@ -215,8 +251,13 @@ export default function Messages() {
 
   if (!currentUser) {
     return (
-      <div style={{ padding: 40 }}>
-        Could not load current user.
+      <div style={{ padding: 40, textAlign: "center" }}>
+        <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>
+          Please log in to view your messages
+        </h2>
+        <p style={{ color: "#666", fontSize: 14 }}>
+          You need to be logged in to access your conversations.
+        </p>
       </div>
     );
   }
