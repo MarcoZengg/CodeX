@@ -1,79 +1,181 @@
+// Import API URL from config
+import { API_URL } from "../config";
+
 export interface Message {
-  id?: string;
+  id: string;
   conversation_id: string;
   sender_id: string;
   content: string;
-  is_read?: boolean;
-  created_date?: string;
+  is_read: boolean;
+  created_date: string;
 }
 
-// Mock data for development
-const mockMessages: Message[] = [
-  {
-    id: "msg1",
-    conversation_id: "conv1",
-    sender_id: "student1",
-    content: "Hi! Is the book still available?",
-    is_read: false,
-    created_date: new Date(Date.now() - 3600000).toISOString(),
-  },
-  {
-    id: "msg2",
-    conversation_id: "conv1",
-    sender_id: "current_user",
-    content: "Yes, it is! Are you interested?",
-    is_read: true,
-    created_date: new Date(Date.now() - 3300000).toISOString(),
-  },
-];
+export interface Conversation {
+  id: string;
+  participant1_id: string;
+  participant2_id: string;
+  item_id?: string;
+  last_message_at?: string;
+  created_date: string;
+  updated_date: string;
+}
+
+export interface ConversationCreate {
+  participant1_id: string;
+  participant2_id: string;
+  item_id?: string;
+}
+
+export interface MessageCreate {
+  conversation_id: string;
+  sender_id: string;
+  content: string;
+}
 
 // Entity class for Message operations
 export class MessageEntity {
+  /**
+   * Create a new conversation
+   */
+  static async createConversation(data: ConversationCreate): Promise<Conversation> {
+    try {
+      const response = await fetch(`${API_URL}/api/conversations`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to create conversation: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error creating conversation:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all conversations for a user
+   */
+  static async getConversations(userId: string): Promise<Conversation[]> {
+    try {
+      const response = await fetch(`${API_URL}/api/conversations?user_id=${userId}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to get conversations: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error getting conversations:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get messages for a conversation
+   */
+  static async getMessages(conversationId: string): Promise<Message[]> {
+    try {
+      const response = await fetch(`${API_URL}/api/messages?conversation_id=${conversationId}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to get messages: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error getting messages:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send a new message
+   */
+  static async sendMessage(data: MessageCreate): Promise<Message> {
+    try {
+      const response = await fetch(`${API_URL}/api/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to send message: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error sending message:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Mark conversation as read
+   */
+  static async markAsRead(conversationId: string, userId: string): Promise<void> {
+    try {
+      const response = await fetch(`${API_URL}/api/conversations/${conversationId}/mark-read?user_id=${userId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to mark as read: ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error("Error marking as read:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Filter messages (for backward compatibility with existing code)
+   */
   static async filter(
     filters: Partial<Message>,
     sortBy?: string
   ): Promise<Message[]> {
-    // Mock implementation for development
-    let filtered = [...mockMessages];
-
-    // Apply filters
+    // For getting messages by conversation_id
     if (filters.conversation_id) {
-      filtered = filtered.filter((msg) => msg.conversation_id === filters.conversation_id);
+      return await this.getMessages(filters.conversation_id);
     }
-    if (filters.sender_id) {
-      filtered = filtered.filter((msg) => msg.sender_id === filters.sender_id);
-    }
-
-    // Apply sorting
-    if (sortBy === "created_date" || sortBy === "-created_date") {
-      filtered.sort((a, b) => {
-        const dateA = new Date(a.created_date || 0).getTime();
-        const dateB = new Date(b.created_date || 0).getTime();
-        return sortBy.startsWith("-") ? dateB - dateA : dateA - dateB;
-      });
-    }
-
-    // Simulate network delay for Safari compatibility
-    return new Promise((resolve) => {
-      setTimeout(() => resolve(filtered), 100);
-    });
+    return [];
   }
 
+  /**
+   * Create message (for backward compatibility with existing code)
+   */
   static async create(data: Partial<Message>): Promise<Message> {
-    // Mock implementation for development
-    const newMessage: Message = {
-      id: `msg${Date.now()}`,
-      conversation_id: data.conversation_id || "",
-      sender_id: data.sender_id || "",
-      content: data.content || "",
-      is_read: false,
-      created_date: data.created_date || new Date().toISOString(),
-    };
-
-    // Simulate network delay for Safari compatibility
-    return new Promise((resolve) => {
-      setTimeout(() => resolve(newMessage), 100);
+    if (!data.conversation_id || !data.sender_id || !data.content) {
+      throw new Error("Missing required fields: conversation_id, sender_id, content");
+    }
+    return await this.sendMessage({
+      conversation_id: data.conversation_id,
+      sender_id: data.sender_id,
+      content: data.content,
     });
   }
 }
-

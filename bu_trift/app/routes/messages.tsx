@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import type { Route } from "./+types/messages";
 import { Conversation, User, Message } from "@/entities";
 import type { Conversation as ConversationType } from "@/entities/Conversation";
 import type { User as UserType } from "@/entities/User";
 import type { Message as MessageType } from "@/entities/Message";
+import { MessageEntity } from "@/entities/Message";
+import { WebSocketClient } from "@/utils/websocket";
+import { API_URL } from "@/config";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -20,6 +23,7 @@ export default function Messages() {
 
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [newMessage, setNewMessage] = useState("");
+  const wsClientRef = useRef<WebSocketClient | null>(null);
 
   // Mock meetup details (time & place) – front-end only for now
   const [meetupTime, setMeetupTime] = useState<string | null>(null);
@@ -60,25 +64,62 @@ export default function Messages() {
     async function load() {
       try {
         setIsLoading(true);
-        const user = await User.me();
-        setCurrentUser(user);
+        // Get current user from localStorage (since User.me() is still mock)
+        const storedUser = localStorage.getItem("currentUser");
+        if (storedUser) {
+          const user = JSON.parse(storedUser);
+          setCurrentUser(user);
 
-        const all = await Conversation.filter({}, "-last_message_at");
-        const mine = all.filter((c) =>
-          c.participant_ids?.includes(user.id!)
-        );
+          // Load conversations from API
+          const conversations = await MessageEntity.getConversations(user.id);
+          // Add backward compatibility fields
+          const formattedConversations = conversations.map((conv) => ({
+            ...conv,
+            participant_ids: [conv.participant1_id, conv.participant2_id],
+          }));
+          setConversations(formattedConversations);
 
-        setConversations(mine);
-        if (mine.length > 0) {
-          const firstId = mine[0].id ?? null;
-          setSelectedId(firstId);
+          // Connect WebSocket for real-time messaging
+          const wsClient = new WebSocketClient(user.id);
+          wsClient.connect(API_URL);
+          wsClient.onMessage((data) => {
+            if (data.type === "new_message") {
+              const newMsg = data.data;
+              setMessages((prev) => {
+                // Avoid duplicates
+                if (prev.some((m) => m.id === newMsg.id)) {
+                  return prev;
+                }
+                return [...prev, newMsg];
+              });
+            }
+          });
+          wsClientRef.current = wsClient;
+
+          if (formattedConversations.length > 0) {
+            const firstId = formattedConversations[0].id ?? null;
+            setSelectedId(firstId);
+          }
+        } else {
+          // Fallback to mock User.me() if no localStorage user
+          const user = await User.me();
+          setCurrentUser(user);
         }
+      } catch (error) {
+        console.error("Error loading conversations:", error);
       } finally {
         setIsLoading(false);
       }
     }
 
     load();
+
+    // Cleanup: disconnect WebSocket on unmount
+    return () => {
+      if (wsClientRef.current) {
+        wsClientRef.current.disconnect();
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -87,27 +128,49 @@ export default function Messages() {
         setMessages([]);
         return;
       }
-      const result = await Message.filter(
-        { conversation_id: selectedId },
-        "created_date"
-      );
-      setMessages(result ?? []);
+      try {
+        // Load messages from API
+        const result = await MessageEntity.getMessages(selectedId);
+        setMessages(result ?? []);
+
+        // Mark conversation as read
+        if (currentUser?.id) {
+          await MessageEntity.markAsRead(selectedId, currentUser.id);
+        }
+      } catch (error) {
+        console.error("Error loading messages:", error);
+        // Fallback to empty array on error
+        setMessages([]);
+      }
     }
 
     loadMessages();
-  }, [selectedId]);
+  }, [selectedId, currentUser]);
 
   const handleSend = async () => {
     if (!newMessage.trim() || !currentUser || !selectedId) return;
 
-    const created = await Message.create({
-      conversation_id: selectedId,
-      sender_id: currentUser.id!,
-      content: newMessage,
-    });
+    try {
+      // Send message via API (which will also broadcast via WebSocket)
+      const created = await MessageEntity.sendMessage({
+        conversation_id: selectedId,
+        sender_id: currentUser.id!,
+        content: newMessage.trim(),
+      });
 
-    setMessages((prev) => [...prev, created]);
-    setNewMessage("");
+      // Add message to local state (WebSocket will also add it, but this ensures immediate UI update)
+      setMessages((prev) => {
+        // Avoid duplicates
+        if (prev.some((m) => m.id === created.id)) {
+          return prev;
+        }
+        return [...prev, created];
+      });
+      setNewMessage("");
+    } catch (error) {
+      console.error("Error sending message:", error);
+      alert("Failed to send message. Please try again.");
+    }
   };
 
   if (isLoading) {

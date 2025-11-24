@@ -1,4 +1,5 @@
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, WebSocket, WebSocketDisconnect
+
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -145,6 +146,7 @@ class MessageResponse(BaseModel):
 
 class MessageUpdate(BaseModel):
     is_read: Optional[bool] = None
+
 
 # Helper function to convert ItemDB to response format
 def item_to_response(item: ItemDB) -> dict:
@@ -380,6 +382,74 @@ def get_user_profile(user_id: str, db: Session = Depends(get_db)):
     return user_to_response(user)
 
 # ==========================
+# WebSocket Connection Manager
+# ==========================
+
+# Store active WebSocket connections
+class ConnectionManager:
+    def __init__(self):
+        # Dictionary: user_id -> list of WebSocket connections
+        self.active_connections: dict[str, list[WebSocket]] = {}
+    
+    async def connect(self, websocket: WebSocket, user_id: str):
+        """Accept WebSocket connection and store it"""
+        await websocket.accept()
+        if user_id not in self.active_connections:
+            self.active_connections[user_id] = []
+        self.active_connections[user_id].append(websocket)
+    
+    def disconnect(self, websocket: WebSocket, user_id: str):
+        """Remove WebSocket connection when client disconnects"""
+        if user_id in self.active_connections:
+            self.active_connections[user_id].remove(websocket)
+            if not self.active_connections[user_id]:
+                del self.active_connections[user_id]
+    
+    async def send_personal_message(self, message: dict, user_id: str):
+        """Send message to a specific user's WebSocket connections"""
+        if user_id in self.active_connections:
+            for connection in self.active_connections[user_id]:
+                try:
+                    await connection.send_json(message)
+                except:
+                    pass  # Connection closed, skip it
+    
+    async def broadcast_to_conversation(self, message: dict, conversation_id: str, sender_id: str, db: Session):
+        """Send message to all participants in a conversation (except sender)"""
+        # Get conversation participants
+        conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
+        if not conversation:
+            return
+        
+        participants = [conversation.participant1_id, conversation.participant2_id]
+        
+        # Send to all participants except sender
+        for participant_id in participants:
+            if participant_id != sender_id:
+                await self.send_personal_message(message, participant_id)
+
+# Create global connection manager instance
+manager = ConnectionManager()
+
+# ==========================
+# WebSocket Endpoint
+# ==========================
+
+@app.websocket("/ws/{user_id}")
+async def websocket_endpoint(websocket: WebSocket, user_id: str):
+    """WebSocket endpoint for real-time messaging"""
+    await manager.connect(websocket, user_id)
+    try:
+        while True:
+            # Keep connection alive and listen for messages
+            # You can handle incoming WebSocket messages here if needed
+            data = await websocket.receive_text()
+            # Optional: Process incoming messages from client
+            # For now, we just keep the connection alive
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, user_id)
+
+# ==========================
 # Messaging Endpoints
 # ==========================
 
@@ -463,8 +533,8 @@ def delete_conversation(conversation_id: str, db: Session = Depends(get_db)):
 
 # Messages CRUD
 @app.post("/api/messages", response_model=MessageResponse)
-def create_message(message: MessageCreate, db: Session = Depends(get_db)):
-    """Create a new message in a conversation"""
+async def create_message(message: MessageCreate, db: Session = Depends(get_db)):
+    """Create a new message in a conversation and broadcast via WebSocket"""
     
     # Verify conversation exists
     conversation = db.query(ConversationDB).filter(ConversationDB.id == message.conversation_id).first()
@@ -492,7 +562,21 @@ def create_message(message: MessageCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_message)
     
-    return message_to_response(new_message)
+    # Convert to response format
+    message_response = message_to_response(new_message)
+    
+    # Broadcast new message via WebSocket to conversation participants
+    await manager.broadcast_to_conversation(
+        {
+            "type": "new_message",
+            "data": message_response
+        },
+        message.conversation_id,
+        message.sender_id,
+        db
+    )
+    
+    return message_response
 
 @app.get("/api/messages", response_model=List[MessageResponse])
 def get_messages(conversation_id: str, db: Session = Depends(get_db)):
