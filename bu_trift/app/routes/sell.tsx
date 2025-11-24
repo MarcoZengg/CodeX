@@ -1,9 +1,5 @@
 import { useState, useRef, useEffect } from "react";
 import type { FormEvent } from "react";
-import type { Route } from "./+types/sell";
-import { Item } from "@/entities";
-import type { Item as ItemType } from "@/entities/Item";
-import type { User as UserType } from "@/entities/User";
 import { useNavigate } from "react-router";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,10 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Upload, X, Camera, Plus, DollarSign } from "lucide-react";
 import { motion } from "framer-motion";
-import type { ItemCategory, ItemCondition } from "@/entities/Item";
-import { API_URL } from "../config"; // <-- make sure path matches your project
+import type { ItemCategory, ItemCondition, Item as ItemType } from "@/entities/Item";
+import { ItemEntity } from "@/entities/Item";
+import { API_URL } from "../config";
 
-const categories: { value: ItemCategory | ""; label: string }[] = [
+const categories = [
   { value: "textbooks", label: "Textbooks" },
   { value: "electronics", label: "Electronics" },
   { value: "clothing", label: "Clothing" },
@@ -28,15 +25,15 @@ const categories: { value: ItemCategory | ""; label: string }[] = [
   { value: "home_decor", label: "Home Decor" },
   { value: "kitchen_items", label: "Kitchen Items" },
   { value: "bikes_transport", label: "Bikes & Transport" },
-  { value: "other", label: "Other" }
+  { value: "other", label: "Other" },
 ];
 
-const conditions: { value: ItemCondition; label: string }[] = [
+const conditions = [
   { value: "new", label: "New" },
   { value: "like_new", label: "Like New" },
   { value: "good", label: "Good" },
   { value: "fair", label: "Fair" },
-  { value: "poor", label: "Poor" }
+  { value: "poor", label: "Poor" },
 ];
 
 interface FormData {
@@ -50,38 +47,24 @@ interface FormData {
   images: string[];
 }
 
-export function meta({}: Route.MetaArgs) {
-  return [
-    { title: "Sell Item - BUTrift" },
-    { name: "description", content: "List a new item for sale on BUTrift" },
-  ];
-}
-
 export default function Sell() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [firebaseToken, setFirebaseToken] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
-  const [currentUser, setCurrentUser] = useState<UserType | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
 
-  // Load current user from localStorage 
-  // Purpose: remember "you're logged in" in this browser
+  // Load Firebase token & redirect if missing
   useEffect(() => {
-    const storedUser = localStorage.getItem("currentUser");
-    if (storedUser) {
-      try {
-        const user = JSON.parse(storedUser) as UserType;
-        setCurrentUser(user);
-      } catch (error) {
-        console.error("Error parsing stored user:", error);
-      }
-    } else {
-      // If not logged in, redirect to login page
+    const token = localStorage.getItem("firebaseToken");
+    if (!token) {
       navigate(createPageUrl("Login"));
+      return;
     }
+    setFirebaseToken(token);
   }, [navigate]);
-  
+
   const [formData, setFormData] = useState<FormData>({
     title: "",
     description: "",
@@ -90,144 +73,116 @@ export default function Sell() {
     condition: "",
     location: "",
     is_negotiable: false,
-    images: []
+    images: [],
   });
 
-  const handleInputChange = (field: keyof FormData, value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+  const updateField = (field: keyof FormData, value: any) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  // REAL FILE UPLOAD: sends files to FastAPI /api/upload-image
+  // FIXED: Image upload must include Firebase token
   const handleFileUpload = async (files: FileList | null) => {
-    if (!files) return;
+    if (!files || !firebaseToken) return;
 
     setUploadingImages(true);
-    const uploadedURLs: string[] = [];
+    const uploaded: string[] = [];
 
     try {
       for (const file of Array.from(files)) {
-        const data = new FormData();
-        data.append("file", file);
+        const form = new FormData();
+        form.append("file", file);
 
         const res = await fetch(`${API_URL}/api/upload-image`, {
           method: "POST",
-          body: data,
+          headers: { Authorization: `Bearer ${firebaseToken}` },
+          body: form,
         });
 
-        if (!res.ok) throw new Error("Image upload failed");
+        if (!res.ok) throw new Error("Upload failed");
 
-        const json = await res.json(); // { url: "http://localhost:8000/uploads/..." }
-        uploadedURLs.push(json.url);
+        const json = await res.json();
+        uploaded.push(json.url);
       }
 
-      setFormData(prev => ({
-        ...prev,
-        images: [...prev.images, ...uploadedURLs],
-      }));
-      
-      // Clear image error when images are successfully uploaded
+      updateField("images", [...formData.images, ...uploaded]);
       setImageError(null);
-    } catch (error) {
-      console.error("Error uploading images:", error);
+    } catch {
       alert("Failed to upload image(s). Please try again.");
     } finally {
       setUploadingImages(false);
     }
   };
 
-  const removeImage = (indexToRemove: number) => {
-    setFormData(prev => {
-      const newImages = prev.images.filter((_, index) => index !== indexToRemove);
-      // If removing the last image, show error
-      if (newImages.length === 0) {
-        setImageError("Please upload at least one photo for your listing.");
-      } else {
-        // Clear error if images remain
-        setImageError(null);
-      }
-      return {
-        ...prev,
-        images: newImages
-      };
-    });
+  const removeImage = (i: number) => {
+    const newImgs = formData.images.filter((_, idx) => idx !== i);
+    updateField("images", newImgs);
+
+    if (newImgs.length === 0) {
+      setImageError("Please upload at least one photo.");
+    } else {
+      setImageError(null);
+    }
   };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+
+    if (!firebaseToken) {
+      navigate(createPageUrl("Login"));
+      return;
+    }
     setIsSubmitting(true);
 
     try {
-      // Check if user is logged in
-      if (!currentUser || !currentUser.id) {
-        alert("Please log in to create a listing");
-        navigate(createPageUrl("Login"));
-        setIsSubmitting(false);
-        return;
-      }
-
-      // Validate required fields
+      // Validate fields
       if (!formData.category || !formData.condition) {
-        alert("Please select both category and condition");
+        alert("Please select category and condition");
         setIsSubmitting(false);
         return;
       }
 
-      if (!formData.title.trim() || !formData.description.trim() || !formData.price.trim()) {
-        alert("Please fill in all required fields");
+      if (
+        !formData.title.trim() ||
+        !formData.description.trim() ||
+        !formData.price.trim()
+      ) {
+        alert("Please fill all required fields");
         setIsSubmitting(false);
         return;
       }
 
-      // Validate that at least one image is uploaded
-      if (!formData.images || formData.images.length === 0) {
-        setImageError("Please upload at least one photo for your listing.");
+      if (formData.images.length === 0) {
+        setImageError("Please upload at least one photo.");
         setIsSubmitting(false);
-        // Scroll to image upload section
-        const imageSection = document.getElementById("image-upload-section");
-        if (imageSection) {
-          imageSection.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
         return;
       }
 
-      // Clear image error if images are present
-      setImageError(null);
-
-      // Prepare data for backend - use the actual logged-in user's ID
-      const itemData: ItemType = {
+      // MUST NOT send seller_id — backend derives from Firebase
+      const payload: Partial<ItemType> = {
         title: formData.title,
         description: formData.description,
         price: parseFloat(formData.price),
-        category: formData.category as ItemType["category"],
-        condition: formData.condition as ItemType["condition"],
-        seller_id: currentUser.id,
+        category: formData.category,
+        condition: formData.condition,
         location: formData.location || undefined,
         is_negotiable: formData.is_negotiable,
-        images: formData.images || [], // Ensure images is always an array
+        images: formData.images,
       };
 
-      console.log("Creating item with images:", itemData.images); // Debug log
-      await Item.create(itemData);
+      await ItemEntity.create(payload);
 
       navigate(createPageUrl("Home"));
-    } catch (error) {
-      console.error("Error creating item:", error);
-      alert(error instanceof Error ? error.message : "Failed to create listing. Please try again.");
+    } catch (err) {
+      alert("Failed to publish listing.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Show loading state while checking user
-  if (!currentUser) {
+  if (!firebaseToken) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-white to-neutral-50 p-6 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-neutral-600">Loading...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <p>Loading...</p>
       </div>
     );
   }
@@ -241,236 +196,190 @@ export default function Sell() {
           transition={{ duration: 0.6 }}
           className="mb-8"
         >
-          <h1 className="text-3xl font-bold text-neutral-900 mb-2">Sell Your Item</h1>
-          <p className="text-neutral-600">List your item for fellow BU students to discover</p>
+          <h1 className="text-3xl font-bold text-neutral-900">Sell Your Item</h1>
+          <p className="text-neutral-600">List your item for fellow BU students</p>
         </motion.div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Basic Information */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
-          >
-            <Card className="border-neutral-200/60">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Plus className="w-5 h-5 text-red-600" />
-                  Item Details
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
+          {/* Item Details */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Plus className="w-5 h-5 text-red-600" />
+                Item Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <Label>Title</Label>
+                <Input
+                  value={formData.title}
+                  onChange={(e) => updateField("title", e.target.value)}
+                  required
+                />
+              </div>
+
+              <div>
+                <Label>Description</Label>
+                <Textarea
+                  value={formData.description}
+                  onChange={(e) => updateField("description", e.target.value)}
+                  required
+                  className="h-32"
+                />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
                 <div>
-                  <Label htmlFor="title">Item Title</Label>
+                  <Label>Category</Label>
+                  <Select
+                    value={formData.category}
+                    onValueChange={(v) => updateField("category", v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((c) => (
+                        <SelectItem key={c.value} value={c.value}>
+                          {c.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Condition</Label>
+                  <Select
+                    value={formData.condition}
+                    onValueChange={(v) => updateField("condition", v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select condition" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {conditions.map((c) => (
+                        <SelectItem key={c.value} value={c.value}>
+                          {c.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Price & Location */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-green-600" />
+                Pricing & Pickup
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <Label>Price ($)</Label>
                   <Input
-                    id="title"
-                    placeholder="e.g., Calculus Textbook, iPhone 12, Study Desk..."
-                    value={formData.title}
-                    onChange={(e) => handleInputChange('title', e.target.value)}
+                    type="number"
+                    value={formData.price}
+                    onChange={(e) => updateField("price", e.target.value)}
+                    min="0"
+                    step="0.01"
                     required
-                    className="mt-2"
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    placeholder="Describe your item's condition, any flaws, why you're selling it..."
-                    value={formData.description}
-                    onChange={(e) => handleInputChange('description', e.target.value)}
-                    required
-                    className="mt-2 h-32"
+                  <Label>Pickup Location</Label>
+                  <Input
+                    value={formData.location}
+                    onChange={(e) => updateField("location", e.target.value)}
                   />
                 </div>
+              </div>
 
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div>
-                    <Label htmlFor="category">Category</Label>
-                    <Select
-                      value={formData.category}
-                      onValueChange={(value) => handleInputChange('category', value as ItemCategory)}
-                    >
-                      <SelectTrigger className="mt-2">
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categories.map((category) => (
-                          <SelectItem key={category.value} value={category.value}>
-                            {category.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="condition">Condition</Label>
-                    <Select
-                      value={formData.condition}
-                      onValueChange={(value) => handleInputChange('condition', value as ItemCondition)}
-                    >
-                      <SelectTrigger className="mt-2">
-                        <SelectValue placeholder="Select condition" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {conditions.map((condition) => (
-                          <SelectItem key={condition.value} value={condition.value}>
-                            {condition.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Pricing & Location */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-          >
-            <Card className="border-neutral-200/60">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <DollarSign className="w-5 h-5 text-green-600" />
-                  Pricing & Pickup
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div>
-                    <Label htmlFor="price">Price ($)</Label>
-                    <Input
-                      id="price"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={formData.price}
-                      onChange={(e) => handleInputChange('price', e.target.value)}
-                      required
-                      className="mt-2"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="location">Pickup Location</Label>
-                    <Input
-                      id="location"
-                      placeholder="e.g., Warren Towers Lobby, GSU..."
-                      value={formData.location}
-                      onChange={(e) => handleInputChange('location', e.target.value)}
-                      className="mt-2"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-3">
-                  <Switch
-                    checked={formData.is_negotiable}
-                    onCheckedChange={(checked) => handleInputChange('is_negotiable', checked)}
-                  />
-                  <Label>Price is negotiable</Label>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+              <div className="flex items-center space-x-3">
+                <Switch
+                  checked={formData.is_negotiable}
+                  onCheckedChange={(val) => updateField("is_negotiable", val)}
+                />
+                <Label>Price is negotiable</Label>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Image Upload */}
-          <motion.div
-            id="image-upload-section"
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.3 }}
-          >
-            <Card className="border-neutral-200/60">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Camera className="w-5 h-5 text-blue-600" />
-                  Photos <span className="text-red-600">*</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {imageError && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg"
-                  >
-                    <p className="text-red-700 text-sm font-medium">{imageError}</p>
-                  </motion.div>
-                )}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={(e) => handleFileUpload(e.target.files)}
-                  className="hidden"
-                />
+          <Card id="image-upload-section">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Camera className="w-5 h-5 text-blue-600" />
+                Photos <span className="text-red-600">*</span>
+              </CardTitle>
+            </CardHeader>
 
-                {formData.images.length > 0 && (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                    {formData.images.map((image, index) => (
-                      <div key={index} className="relative group">
-                        <img
-                          src={image}
-                          alt={`Upload ${index + 1}`}
-                          className="w-full aspect-square object-cover rounded-lg"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeImage(index)}
-                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+            <CardContent>
+              {imageError && (
+                <motion.div className="mb-4 p-3 bg-red-50 border border-red-200 rounded">
+                  <p className="text-red-700">{imageError}</p>
+                </motion.div>
+              )}
 
-                <div
-                  className="border-2 border-dashed border-neutral-300 rounded-lg p-8 text-center cursor-pointer hover:border-red-400 transition-colors"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Upload className="w-12 h-12 text-neutral-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-neutral-900 mb-2">Add Photos</h3>
-                  <p className="text-neutral-600">
-                    {uploadingImages ? "Uploading..." : "Click to select images or drag and drop"}
-                  </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handleFileUpload(e.target.files)}
+              />
+
+              {formData.images.length > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  {formData.images.map((img, index) => (
+                    <div key={index} className="relative group">
+                      <img
+                        src={img}
+                        alt={`Upload ${index}`}
+                        className="w-full aspect-square object-cover rounded"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(index)}
+                        className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+              )}
 
-          {/* Submit Button */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.4 }}
-            className="flex gap-4"
-          >
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => navigate(createPageUrl("Home"))}
-              className="flex-1"
-            >
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-neutral-300 rounded-lg p-8 text-center cursor-pointer"
+              >
+                <Upload className="w-12 h-12 mx-auto text-neutral-400 mb-4" />
+                <p className="text-neutral-600">
+                  {uploadingImages ? "Uploading..." : "Click to add images"}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Submit */}
+          <div className="flex gap-4">
+            <Button variant="outline" type="button" onClick={() => navigate(createPageUrl("Home"))}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={isSubmitting || uploadingImages}
-              className="flex-1 bg-red-600 hover:bg-red-700"
-            >
+
+            <Button type="submit" disabled={isSubmitting || uploadingImages} className="bg-red-600">
               {isSubmitting ? "Publishing..." : "Publish Listing"}
             </Button>
-          </motion.div>
+          </div>
         </form>
       </div>
     </div>

@@ -14,7 +14,6 @@ export type ItemCategory =
   | "other";
 
 export type ItemCondition = "new" | "like_new" | "good" | "fair" | "poor";
-
 export type ItemStatus = "available" | "sold" | "reserved";
 
 export interface Item {
@@ -25,14 +24,28 @@ export interface Item {
   category: ItemCategory;
   condition: ItemCondition;
   images?: string[];
-  seller_id: string;
+  seller_id?: string;     
   status?: ItemStatus;
-  location?: string;
+  location?: string | null;
   is_negotiable?: boolean;
   created_date?: string;
 }
 
-// Mock data for development
+/* =====================================================
+   Helper: Get Auth Header using Firebase Token
+   ===================================================== */
+function getAuthHeaders(includeJson: boolean = true): HeadersInit {
+  const token = localStorage.getItem("firebaseToken");
+
+  const headers: HeadersInit = {};
+  if (includeJson) headers["Content-Type"] = "application/json";
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return headers;
+}
+
+/* =====================================================
+   MOCK DATA (kept exactly for dev fallback)
+   ===================================================== */
 const mockItems: Item[] = [
   {
     id: "1",
@@ -120,164 +133,120 @@ const mockItems: Item[] = [
   },
 ];
 
-// Entity class for Item operations
+/* =====================================================
+   ITEM ENTITY CLASS (Firebase + Backend)
+   ===================================================== */
 export class ItemEntity {
+
+  /* =============================
+     FILTER ITEMS
+     ============================= */
   static async filter(
     filters: Partial<Item>,
     sortBy?: string,
     limit?: number
   ): Promise<Item[]> {
     try {
-      // Call FastAPI backend endpoint
       const params = new URLSearchParams();
-      if (filters.status) params.append('status', filters.status);
-      if (filters.category) params.append('category', filters.category);
-      if (filters.condition) params.append('condition', filters.condition);
-      if (filters.seller_id) params.append('seller_id', filters.seller_id);
-      
-      const queryString = params.toString();
-      const url = queryString 
-        ? `${API_URL}/api/items?${queryString}`
+      if (filters.status) params.append("status", filters.status);
+      if (filters.category) params.append("category", filters.category);
+      if (filters.condition) params.append("condition", filters.condition);
+      if (filters.seller_id) params.append("seller_id", filters.seller_id);
+
+      const url = params.toString()
+        ? `${API_URL}/api/items?${params.toString()}`
         : `${API_URL}/api/items`;
-      
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch items: ${response.statusText}`);
-      }
-      
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: getAuthHeaders(false),  
+      });
+
+      if (!response.ok) throw new Error("Failed to fetch items");
+
       let items: Item[] = await response.json();
-      
-      // Apply client-side sorting (backend can do this later)
+
+      // Sorting logic preserved
       if (sortBy) {
-        if (sortBy === "-created_date" || sortBy === "created_date") {
-          items.sort((a, b) => {
-            const dateA = new Date(a.created_date || 0).getTime();
-            const dateB = new Date(b.created_date || 0).getTime();
-            return sortBy.startsWith("-") ? dateB - dateA : dateA - dateB;
-          });
+        if (sortBy.includes("created_date")) {
+          items.sort((a, b) =>
+            sortBy.startsWith("-")
+              ? new Date(b.created_date || "").getTime() -
+                new Date(a.created_date || "").getTime()
+              : new Date(a.created_date || "").getTime() -
+                new Date(b.created_date || "").getTime()
+          );
         }
-        if (sortBy === "-price" || sortBy === "price") {
-          items.sort((a, b) => {
-            return sortBy.startsWith("-") ? b.price - a.price : a.price - b.price;
-          });
+        if (sortBy.includes("price")) {
+          items.sort((a, b) =>
+            sortBy.startsWith("-") ? b.price - a.price : a.price - b.price
+          );
         }
       }
-      
-      // Apply limit
-      if (limit) {
-        items = items.slice(0, limit);
-      }
-      
+
+      if (limit) items = items.slice(0, limit);
+
       return items;
     } catch (error) {
-      console.error('Error fetching items from backend, using fallback mock data:', error);
-      // Fallback to mock data if backend is unavailable
-      let filtered = [...mockItems];
-      
-      if (filters.status) {
-        filtered = filtered.filter((item) => item.status === filters.status);
-      }
-      if (filters.category) {
-        filtered = filtered.filter((item) => item.category === filters.category);
-      }
-      if (filters.condition) {
-        filtered = filtered.filter((item) => item.condition === filters.condition);
-      }
-      if (filters.seller_id) {
-        filtered = filtered.filter((item) => item.seller_id === filters.seller_id);
-      }
-      
-      if (limit) {
-        filtered = filtered.slice(0, limit);
-      }
-      
-      return new Promise((resolve) => {
-        setTimeout(() => resolve(filtered), 100);
-      });
+      console.error("Error fetching items; using fallback:", error);
+      return mockItems;
     }
   }
 
+  /* =============================
+     GET ITEM BY ID
+     ============================= */
   static async get(id: string): Promise<Item> {
     try {
-      // Call FastAPI backend endpoint
-      const response = await fetch(`${API_URL}/api/items/${id}`);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch item: ${response.statusText}`);
-      }
-      
+      const response = await fetch(`${API_URL}/api/items/${id}`, {
+        method: "GET",
+        headers: getAuthHeaders(false),  
+      });
+
+      if (!response.ok) throw new Error("Failed to fetch item");
+
       return await response.json();
     } catch (error) {
-      console.error('Error fetching item from backend, using fallback mock data:', error);
-      // Fallback to mock data if backend is unavailable
-      const found = mockItems.find((item) => item.id === id);
-      if (found) {
-        return new Promise((resolve) => {
-          setTimeout(() => resolve(found), 100);
-        });
-      }
-      // Return first item as fallback
-      return new Promise((resolve) => {
-        setTimeout(() => resolve(mockItems[0]), 100);
-      });
+      console.error("Error fetching item; using fallback:", error);
+      return mockItems.find((i) => i.id === id) || mockItems[0];
     }
   }
 
+  /* =============================
+     CREATE ITEM (Firebase-protected)
+     ============================= */
   static async create(data: Partial<Item>): Promise<Item> {
     try {
-      // Prepare request body - remove undefined fields and null values for optional fields
-      const requestBody: any = {
+      const token = localStorage.getItem("firebaseToken");
+      if (!token) throw new Error("You must be logged in to create an item.");
+
+      // 🔥 FIXED — seller_id must NOT be included
+      const body = {
         title: data.title,
         description: data.description,
         price: data.price,
         category: data.category,
         condition: data.condition,
-        seller_id: data.seller_id,
+        location: data.location ?? null,
+        is_negotiable: data.is_negotiable ?? false,
+        images: data.images ?? [],
       };
 
-      // Only include optional fields if they have values (send null to backend for empty strings)
-      if (data.location !== undefined && data.location !== null && data.location !== '') {
-        requestBody.location = data.location;
-      } else {
-        requestBody.location = null;  // Send null to backend for optional field
-      }
-      if (data.is_negotiable !== undefined) {
-        requestBody.is_negotiable = data.is_negotiable;
-      }
-      // Include images array (can be empty array)
-      if (data.images !== undefined) {
-        requestBody.images = data.images;
-      } else {
-        requestBody.images = [];  // Default to empty array if not provided
-      }
-
-      console.log("Sending to backend - images:", requestBody.images); // Debug log
-
-      // Call FastAPI backend endpoint
       const response = await fetch(`${API_URL}/api/items`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
+        method: "POST",
+        headers: getAuthHeaders(true),   
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
-        // Get error message from backend if available
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.detail || errorData.message || `Failed to create item: ${response.statusText}`;
-        console.error('Backend error:', errorData);
-        throw new Error(errorMessage);
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to create item");
       }
 
-      // Parse and return the created item from backend
-      const createdItem = await response.json();
-      return createdItem as Item;
+      return await response.json();
     } catch (error) {
-      console.error('Error creating item:', error);
+      console.error("Error creating item:", error);
       throw error;
     }
   }
 }
-
