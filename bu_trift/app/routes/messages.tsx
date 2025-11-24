@@ -20,6 +20,7 @@ export default function Messages() {
   const [conversations, setConversations] = useState<ConversationType[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [participantUsers, setParticipantUsers] = useState<Record<string, UserType>>({});
 
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -78,6 +79,37 @@ export default function Messages() {
             participant_ids: [conv.participant1_id, conv.participant2_id],
           }));
           setConversations(formattedConversations);
+
+          // Fetch user data for all other participants
+          const otherParticipantIds = new Set<string>();
+          formattedConversations.forEach((conv) => {
+            if (conv.participant1_id !== user.id) {
+              otherParticipantIds.add(conv.participant1_id);
+            }
+            if (conv.participant2_id !== user.id) {
+              otherParticipantIds.add(conv.participant2_id);
+            }
+          });
+
+          // Fetch all participant user data
+          const userDataPromises = Array.from(otherParticipantIds).map(async (userId) => {
+            try {
+              const userData = await User.getById(userId);
+              return { userId, userData };
+            } catch (error) {
+              console.error(`Error fetching user ${userId}:`, error);
+              return { userId, userData: null };
+            }
+          });
+
+          const userDataResults = await Promise.all(userDataPromises);
+          const usersMap: Record<string, UserType> = {};
+          userDataResults.forEach(({ userId, userData }) => {
+            if (userData) {
+              usersMap[userId] = userData;
+            }
+          });
+          setParticipantUsers(usersMap);
 
           // Connect WebSocket for real-time messaging
           const wsClient = new WebSocketClient(user.id);
@@ -222,8 +254,10 @@ export default function Messages() {
           {conversations.map((c) => {
             const otherId =
               c.participant_ids?.find((id) => id !== currentUser.id) ??
-              "Student";
-            const name = `User ${otherId.substring(0, 4)}`;
+              null;
+            // Get the other participant's display name, or fallback to ID
+            const otherUser = otherId ? participantUsers[otherId] : null;
+            const name = otherUser?.display_name || (otherId ? `User ${otherId.substring(0, 8)}` : "Unknown User");
             const isSelected = c.id === selectedId;
 
             // Simple mock status based on isCompleted/hasLeftReview – per conversation

@@ -43,7 +43,27 @@ export default function ItemDetail({ params }: Route.ComponentProps) {
     if (itemId) {
       loadItemAndSeller(itemId);
     }
-    User.me().then(setCurrentUser);
+    // Get current user from localStorage (actual logged-in user)
+    // Only set currentUser if there's a real logged-in user
+    const storedUser = localStorage.getItem("currentUser");
+    if (storedUser) {
+      try {
+        const user = JSON.parse(storedUser);
+        // Only use if it's a real user (not mock "current_user")
+        if (user.id && user.id !== "current_user") {
+          setCurrentUser(user);
+        } else {
+          // Invalid or mock user - set to null (user not logged in)
+          setCurrentUser(null);
+        }
+      } catch (error) {
+        console.error("Error parsing user from localStorage:", error);
+        setCurrentUser(null);
+      }
+    } else {
+      // No user in localStorage - user is not logged in
+      setCurrentUser(null);
+    }
   }, [itemId]);
 
   const loadItemAndSeller = async (id: string) => {
@@ -79,7 +99,7 @@ export default function ItemDetail({ params }: Route.ComponentProps) {
             participant_ids: { op: 'contains', value: currentUser.id! } as any
         });
 
-        const existingConvoWithSeller = existingConvos.find(c => c.participant_ids.includes(seller.id));
+        const existingConvoWithSeller = existingConvos.find(c => c.participant_ids?.includes(seller.id));
 
         if (existingConvoWithSeller) {
             navigate(`${createPageUrl("Messages")}?conversationId=${existingConvoWithSeller.id}`);
@@ -216,7 +236,13 @@ export default function ItemDetail({ params }: Route.ComponentProps) {
                       disabled={isSendingMessage || !currentUser || currentUser.id === seller.id}
                     >
                       <MessageCircle className="w-4 h-4 mr-2" />
-                      {isSendingMessage ? "Starting..." : currentUser?.id === seller.id ? "This is your item" : "Message Seller"}
+                      {isSendingMessage 
+                        ? "Starting..." 
+                        : !currentUser 
+                          ? "Please log in to message" 
+                          : currentUser.id === seller.id 
+                            ? "This is your item" 
+                            : "Message Seller"}
                     </Button>
                   </CardContent>
                 </Card>
