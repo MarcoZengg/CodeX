@@ -79,11 +79,29 @@ export default function Login(_props: Route.ComponentProps) {
       navigate(createPageUrl("Profile"));
     } catch (err) {
       console.error("Error logging in:", err);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Incorrect email or password. Please try again."
-      );
+      // Enhanced error messages for Firebase auth errors
+      let errorMessage = "Failed to sign in. Please try again.";
+      if (err instanceof Error) {
+        const errorCode = (err as any).code;
+        if (errorCode === "auth/invalid-email") {
+          errorMessage = "Invalid email address.";
+        } else if (errorCode === "auth/user-disabled") {
+          errorMessage = "This account has been disabled.";
+        } else if (errorCode === "auth/user-not-found") {
+          errorMessage = "No account found with this email.";
+        } else if (errorCode === "auth/wrong-password") {
+          errorMessage = "Incorrect password.";
+        } else if (errorCode === "auth/network-request-failed") {
+          errorMessage = "Network error. Please check your connection.";
+        } else if (errorCode === "auth/too-many-requests") {
+          errorMessage = "Too many failed attempts. Please try again later.";
+        } else if (err.message.includes("Failed to load profile")) {
+          errorMessage = "Login successful but could not load profile. Please try again.";
+        } else {
+          errorMessage = err.message || errorMessage;
+        }
+      }
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
