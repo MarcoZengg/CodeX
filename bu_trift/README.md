@@ -24,9 +24,11 @@ According to the course requirements:
 - **Home Page**: Hero section, featured items, category grid, community stats
 - **Browse Page**: Item listing with filtering, sorting, and search functionality (displays item images)
 - **Item Details Page**: Detailed item view with image gallery (supports multiple images) and seller information
-- **Sell Page**: Form to create new listings with image upload
-- **Messages Page**: Conversation list and messaging interface
-- **Profile Page**: User profile with listings and stats
+- **Sell Page**: Form to create new listings with image upload (requires authentication)
+- **Login Page**: User login with Firebase Authentication
+- **Register Page**: User registration with Firebase Authentication
+- **Messages Page**: Conversation list and messaging interface with real-time updates via WebSocket
+- **Profile Page**: User profile with listings and stats (requires authentication)
 
 #### UI/UX
 - Responsive design (Mobile & Desktop)
@@ -49,62 +51,88 @@ According to the course requirements:
 
 #### Backend Services Implemented
 - ✅ **Item Management Service**: Complete CRUD operations
-  - ✅ GET all items (`/api/items`)
+  - ✅ GET all items (`/api/items`) with filtering support
   - ✅ GET item by ID (`/api/items/{item_id}`)
-  - ✅ POST create item (`/api/items`)
+  - ✅ POST create item (`/api/items`) - Protected with Firebase auth
   - ✅ Database persistence with SQLite
+- ✅ **User Management Service**: Complete with Firebase authentication
+  - ✅ POST create profile (`/api/users/create-profile`) - Protected with Firebase
+  - ✅ GET current user (`/api/users/me`) - Protected with Firebase
+  - ✅ GET user by ID (`/api/users/{user_id}`) - Public
+  - ✅ Firebase token verification on protected endpoints
+- ✅ **Messaging Service**: Complete with real-time WebSocket support
+  - ✅ Conversations CRUD (Create, Read, Update, Delete)
+  - ✅ Messages CRUD (Create, Read, Update, Delete)
+  - ✅ Real-time messaging via WebSocket (`/ws/{user_id}`)
+  - ✅ Database persistence for conversations and messages
 
 #### Database
 - ✅ **SQLite Database**: `butrift.db` file (auto-generated)
 - ✅ **Items Table**: Fully implemented with schema
   - Columns: id, title, description, price, category, condition, seller_id, status, location, is_negotiable, created_date, images
+- ✅ **Users Table**: Fully implemented with Firebase authentication
+  - Columns: id, email, firebase_uid, display_name, is_verified, profile_image_url, bio, rating, total_sales, created_date, updated_date
+- ✅ **Conversations Table**: Fully implemented
+  - Columns: id, participant1_id, participant2_id, item_id, last_message_at, created_date, updated_date
+- ✅ **Messages Table**: Fully implemented
+  - Columns: id, conversation_id, sender_id, content, is_read, created_date
 
 #### Frontend Integration
 - ✅ **API Integration**: Frontend connected to FastAPI backend
 - ✅ **Item Entity**: Calls real backend API (`http://localhost:8000/api/items`)
-- ✅ **User Entity**: Calls real backend API (Simple - no authentication yet)
-  - ✅ `User.register()` - Register new user (`POST /api/users/register`)
+- ✅ **User Entity**: Calls real backend API with Firebase authentication
+  - ✅ `User.register()` - Register new user with Firebase (`POST /api/users/create-profile`)
   - ✅ `User.getById()` - Get public user profile (`GET /api/users/{user_id}`)
-  - ✅ `User.me()` - Returns mock user data (authentication to be added later)
-  - ✅ **Fallback to Mock Data**: If backend unavailable, uses mock data
+  - ✅ `User.me()` - Get current user profile with Firebase token (`GET /api/users/me`)
+- ✅ **Firebase Authentication**: Fully integrated
+  - ✅ Firebase login/registration on frontend
+  - ✅ Firebase token stored in localStorage
+  - ✅ Protected endpoints use Firebase token verification
 - ✅ **Error Handling**: Try-catch blocks for API calls
 - ✅ **Image Upload**: Fully implemented
-  - ✅ Image upload on sell page (`POST /api/upload-image`)
+  - ✅ Image upload on sell page (`POST /api/upload-image`) - Protected with Firebase auth
   - ✅ Images stored in `backend/uploads` directory
   - ✅ Image URLs saved in database `images` column (JSON array)
   - ✅ Images displayed in item cards and item details pages
-- ⏳ **Messaging**: Still using mock data
-- ⏳ **Authentication Flow**: To be implemented after all backend services are complete
+- ✅ **Messaging**: Fully implemented with real-time WebSocket support
+  - ✅ Conversations CRUD operations
+  - ✅ Messages CRUD operations
+  - ✅ Real-time messaging via WebSocket
+  - ✅ Frontend messaging page with live updates
 
 ### ⏳ Pending Implementation
 
 #### Backend Services
-- ✅ **User Management Service**: Basic registration (Authentication to be added later)
-  - ✅ User registration endpoint (`POST /api/users/register`)
+- ✅ **User Management Service**: Complete with Firebase authentication
+  - ✅ User registration endpoint with Firebase (`POST /api/users/create-profile`)
+  - ✅ Get current user profile (`GET /api/users/me`) - Protected with Firebase
   - ✅ Get user by ID (`GET /api/users/{user_id}`)
   - ✅ Users database table (`users` table with SQLAlchemy)
-  - ✅ Password hashing with bcrypt (passwords stored securely)
+  - ✅ Firebase UID storage (`firebase_uid` column)
   - ✅ BU email validation (@bu.edu required)
-  - ⏳ **Authentication (JWT)**: To be implemented after all backend services are complete
-- [ ] **Messaging Service**: Real-time messaging
-  - [ ] Conversations CRUD
-  - [ ] Messages CRUD
-  - [ ] Database tables for conversations & messages
+  - ✅ **Firebase Authentication**: Fully implemented with token verification
+- ✅ **Messaging Service**: Fully implemented with real-time support
+  - ✅ Conversations CRUD (Create, Read, Update, Delete)
+  - ✅ Messages CRUD (Create, Read, Update, Delete)
+  - ✅ Database tables for conversations & messages
+  - ✅ WebSocket support for real-time messaging
+  - ✅ Connection manager for active WebSocket connections
 - ✅ **Image Upload Service**: Fully implemented
-  - ✅ Image upload endpoint (`POST /api/upload-image`)
+  - ✅ Image upload endpoint (`POST /api/upload-image`) - Protected with Firebase
   - ✅ Image storage (local `backend/uploads` directory)
   - ✅ Image URLs stored in item records (`images` JSON column)
   - ✅ Static file serving (`/uploads` route)
 
 #### Frontend Features
-- ✅ User registration (calls backend API)
-- ⏳ Authentication flow (JWT tokens) - To be added after backend services complete
-- [ ] Add register UI page
-- [ ] Add login UI page (after authentication is implemented)
-- [ ] Replace Message mock data with API calls
-- [ ] Replace Conversation mock data with API calls
-- ✅ Implement image upload functionality (complete)
-- [ ] Add error handling and loading states
+- ✅ User registration with Firebase (calls backend API)
+- ✅ User login with Firebase (calls backend API)
+- ✅ Register UI page
+- ✅ Login UI page
+- ✅ Messaging with real-time updates via WebSocket
+- ✅ Replace Message mock data with API calls - **COMPLETE**
+- ✅ Replace Conversation mock data with API calls - **COMPLETE**
+- ✅ Implement image upload functionality - **COMPLETE**
+- ⏳ Enhanced error handling and loading states
 
 #### Testing
 - [ ] Unit tests for entity classes
@@ -138,6 +166,8 @@ According to the course requirements:
 - **Database**: SQLite (development) / PostgreSQL (production ready)
 - **Validation**: Pydantic
 - **Server**: Uvicorn
+- **Authentication**: Firebase Admin SDK
+- **WebSocket**: FastAPI WebSocket support for real-time messaging
 
 ## 📁 Project Structure
 
@@ -157,21 +187,29 @@ bu_trift/
 │   │   └── Layout.tsx      # Main layout
 │   ├── entities/           # Data models & API clients
 │   │   ├── Item.ts         # Item entity (calls FastAPI)
-│   │   ├── User.ts         # User entity (mock data)
-│   │   ├── Message.ts      # Message entity (mock data)
-│   │   ├── Conversation.ts # Conversation entity (mock data)
+│   │   ├── User.ts         # User entity (calls FastAPI with Firebase)
+│   │   ├── Message.ts      # Message entity (calls FastAPI)
+│   │   ├── Conversation.ts # Conversation entity (calls FastAPI)
 │   │   └── index.ts        # Entity exports
+│   ├── config/             # Configuration files
+│   │   └── firebase.ts     # Firebase client configuration
 │   ├── utils/              # Utility functions
+│   │   └── websocket.ts    # WebSocket client for real-time messaging
 │   ├── root.tsx            # Root component
 │   └── app.css             # Global styles
 ├── backend/                # Backend (FastAPI + SQLAlchemy)
 │   ├── main.py             # FastAPI app & endpoints
 │   ├── database.py         # Database connection setup
+│   ├── auth.py             # Firebase authentication verification
+│   ├── firebase_config.py  # Firebase Admin SDK initialization
 │   ├── models/             # Database models (SQLAlchemy)
 │   │   ├── item.py         # ItemDB model
-│   │   └── user.py         # UserDB model
+│   │   ├── user.py         # UserDB model (with firebase_uid)
+│   │   ├── conversation.py # ConversationDB model
+│   │   └── message.py      # MessageDB model
 │   ├── uploads/            # Uploaded images (auto-generated)
 │   ├── butrift.db          # SQLite database (auto-generated)
+│   ├── firebase_service.json # Firebase service account (NOT in Git - add locally)
 │   └── requirement.txt     # Python dependencies (also at root)
 ├── public/                 # Static assets
 ├── package.json            # Frontend dependencies
@@ -187,7 +225,28 @@ bu_trift/
 
 - **Node.js 18+** and npm
 - **Python 3.12+** and pip
+- **Firebase Project**: You'll need a Firebase project set up
 - (Optional) Python virtual environment (recommended)
+
+### Firebase Setup (Required)
+
+1. **Create a Firebase Project** (if you don't have one):
+   - Go to [Firebase Console](https://console.firebase.google.com/)
+   - Create a new project
+   - Enable Authentication → Sign-in method → Email/Password
+
+2. **Get Firebase Service Account**:
+   - Go to Project Settings → Service Accounts
+   - Click "Generate new private key"
+   - Save the JSON file as `backend/firebase_service.json`
+
+3. **Get Firebase Web Config**:
+   - Go to Project Settings → General
+   - Scroll to "Your apps" → Web app
+   - Copy the Firebase configuration object
+   - The config is already in `app/config/firebase.ts` (verify it matches your project)
+
+**Important**: `firebase_service.json` is **NOT** in Git for security. Each developer must add their own file to `backend/` directory.
 
 ### Installation
 
@@ -216,9 +275,22 @@ cd ..
 # Both contain the same dependencies
 ```
 
+4. **Add Firebase Service Account File**:
+   ```bash
+   # Place your firebase_service.json in the backend directory
+   # This file should NOT be committed to Git (already in .gitignore)
+   cp /path/to/your/firebase_service.json backend/firebase_service.json
+   ```
+
+5. **Verify Firebase Configuration**:
+   - Check that `app/config/firebase.ts` has your Firebase project configuration
+   - Verify `backend/firebase_service.json` exists (required for backend authentication)
+
 ### Development
 
 #### Start Backend Server
+
+**Important**: Make sure `backend/firebase_service.json` exists before starting the backend!
 
 Open a terminal and run:
 ```bash
@@ -226,10 +298,14 @@ cd backend
 uvicorn main:app --reload
 ```
 
+**Note**: If you see an error about `firebase_service.json` not found, add the file to `backend/` directory (see Firebase Setup above).
+
 The API will be available at:
 - **API**: `http://localhost:8000`
 - **API Documentation (Swagger UI)**: `http://localhost:8000/docs`
 - **Alternative API Docs (ReDoc)**: `http://localhost:8000/redoc`
+
+**Database**: The database `butrift.db` will be automatically created on first run. If you're upgrading from password-based auth, delete the old database file to recreate it with the new schema (includes `firebase_uid` column).
 
 #### Start Frontend Server
 
@@ -279,15 +355,18 @@ Or use a production ASGI server like Gunicorn with Uvicorn workers.
   - Images saved to `backend/uploads` directory
   - Image URLs stored in database and displayed in item views
 
-#### ⏳ Still Using Mock Data
+#### ✅ Fully Integrated with Backend (All Entities)
 - **User Entity** (`app/entities/User.ts`)
-  - `User.me()` - Returns mock user data
+  - `User.register()` - Creates Firebase user and backend profile
+  - `User.me()` - Gets current user from backend with Firebase token
+  - `User.getById()` - Gets user profile by ID
 - **Conversation Entity** (`app/entities/Conversation.ts`)
-  - `Conversation.filter()` - Returns mock conversations
-  - `Conversation.create()` - Returns mock conversation
+  - `Conversation.filter()` - Calls `GET /api/conversations`
+  - `Conversation.create()` - Calls `POST /api/conversations`
 - **Message Entity** (`app/entities/Message.ts`)
-  - `Message.filter()` - Returns mock messages
-  - `Message.create()` - Returns mock message
+  - `Message.filter()` - Calls `GET /api/messages`
+  - `Message.create()` - Calls `POST /api/messages` (triggers WebSocket broadcast)
+  - WebSocket client integrated for real-time updates
 
 ### API Endpoints
 
@@ -298,29 +377,48 @@ Or use a production ASGI server like Gunicorn with Uvicorn workers.
 - `GET /api/items/{item_id}` - Get item by ID
 - `POST /api/items` - Create new item (with images support)
 
-**User Endpoints (Simple - no authentication yet):**
-- `POST /api/users/register` - Register new user (requires @bu.edu email, no authentication)
-- `POST /api/users/login` - Login user (verifies email and password)
-- `GET /api/users/{user_id}` - Get public user profile by ID
+**User Endpoints (Firebase Authentication):**
+- `POST /api/users/create-profile` - Create user profile (requires Firebase token) - Protected
+- `GET /api/users/me` - Get current user profile (requires Firebase token) - Protected
+- `GET /api/users/{user_id}` - Get public user profile by ID - Public
 
 **Image Upload Endpoints:**
-- `POST /api/upload-image` - Upload a single image file (returns URL)
+- `POST /api/upload-image` - Upload a single image file (returns URL) - Protected with Firebase
 - `GET /uploads/{filename}` - Serve uploaded images (static files)
+
+**Messaging Endpoints:**
+- `POST /api/conversations` - Create a new conversation
+- `GET /api/conversations` - Get all conversations for a user (query param: `user_id`)
+- `GET /api/conversations/{conversation_id}` - Get a specific conversation
+- `PUT /api/conversations/{conversation_id}` - Update conversation
+- `DELETE /api/conversations/{conversation_id}` - Delete conversation
+- `PUT /api/conversations/{conversation_id}/mark-read` - Mark all messages as read (query param: `user_id`)
+- `POST /api/messages` - Create a new message (broadcasts via WebSocket)
+- `GET /api/messages` - Get all messages in a conversation (query param: `conversation_id`)
+- `GET /api/messages/{message_id}` - Get a specific message
+- `PUT /api/messages/{message_id}` - Update a message
+- `DELETE /api/messages/{message_id}` - Delete a message
+
+**WebSocket Endpoints:**
+- `WS /ws/{user_id}` - WebSocket connection for real-time messaging
 
 **Health Check:**
 - `GET /` - API health check
-- `GET /api/health` - Database health check
-
-**To Be Implemented:**
-- User authentication (JWT tokens)
-- Message endpoints (`/api/messages`, `/api/conversations`)
-- Password reset endpoint
 
 ### Database
 
-The SQLite database (`backend/butrift.db`) is automatically created when you first run the backend server. All created items are persisted in this file.
+The SQLite database (`backend/butrift.db`) is automatically created when you first run the backend server. All data (items, users, conversations, messages) is persisted in this file.
 
-**Note**: The `backend/uploads/` directory for storing uploaded images is also automatically created when the backend server starts. You don't need to create it manually.
+**Database Schema**:
+- **users** table: `id`, `email`, `firebase_uid`, `display_name`, `is_verified`, `profile_image_url`, `bio`, `rating`, `total_sales`, `created_date`, `updated_date`
+- **items** table: `id`, `title`, `description`, `price`, `category`, `condition`, `seller_id`, `status`, `location`, `is_negotiable`, `created_date`, `images`
+- **conversations** table: `id`, `participant1_id`, `participant2_id`, `item_id`, `last_message_at`, `created_date`, `updated_date`
+- **messages** table: `id`, `conversation_id`, `sender_id`, `content`, `is_read`, `created_date`
+
+**Important Notes**:
+- The `backend/uploads/` directory for storing uploaded images is automatically created when the backend server starts
+- If upgrading from password-based authentication, **delete** `backend/butrift.db` to recreate it with the new schema (includes `firebase_uid` instead of `password_hash`)
+- The database file is already in `.gitignore` and should not be committed
 
 **Viewing the Database:**
 - Use SQLite browser tools (DB Browser for SQLite)
@@ -329,21 +427,24 @@ The SQLite database (`backend/butrift.db`) is automatically created when you fir
 
 ### Next Steps
 
-1. **Implement User Authentication**
-   - Create User model in `backend/models/user.py`
-   - Add user endpoints in `backend/main.py`
-   - Update frontend User entity to call API
-
-2. **Implement Messaging**
-   - Create Message and Conversation models
-   - Add messaging endpoints
-   - Update frontend entities to call API
-
-3. **Testing**
+1. **Testing** (Priority)
    - Write unit tests for backend models
    - Write integration tests for API endpoints
    - Write frontend component tests
    - Set up CI/CD
+
+2. **Enhanced Features**
+   - Add email notifications for messages
+   - Add push notifications for mobile
+   - Implement advanced search with filters
+   - Add item recommendations
+   - Rating & review system
+
+3. **Production Deployment**
+   - Set up production database (PostgreSQL)
+   - Configure environment variables
+   - Set up Firebase production environment
+   - Deploy backend and frontend
 
 ## 🔧 Available Scripts
 
@@ -372,6 +473,27 @@ When the backend server is running, visit:
 
 These provide automatic documentation for all API endpoints with the ability to test them directly in the browser.
 
+## 🔐 Authentication & Security
+
+### Firebase Authentication
+- **Frontend**: Users sign in/register using Firebase Authentication
+- **Backend**: Firebase Admin SDK verifies ID tokens on protected endpoints
+- **Token Storage**: Firebase ID tokens stored in browser `localStorage`
+- **Protected Endpoints**: All user-related and item creation endpoints require valid Firebase token
+
+### Protected Endpoints
+The following endpoints require a valid Firebase authentication token in the `Authorization: Bearer <token>` header:
+- `POST /api/users/create-profile`
+- `GET /api/users/me`
+- `POST /api/upload-image`
+- `POST /api/items`
+- `WS /ws/{user_id}` (WebSocket connections)
+
+### Security Notes
+- Firebase service account credentials (`firebase_service.json`) are **NOT** in Git
+- Each developer must add their own `firebase_service.json` file
+- Never commit sensitive credentials to version control
+
 ## 📚 Resources
 
 ### Frontend
@@ -379,12 +501,15 @@ These provide automatic documentation for all API endpoints with the ability to 
 - [Tailwind CSS Documentation](https://tailwindcss.com/)
 - [shadcn/ui Components](https://ui.shadcn.com/)
 - [TypeScript Documentation](https://www.typescriptlang.org/)
+- [Firebase Web Documentation](https://firebase.google.com/docs/web)
 
 ### Backend
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [SQLAlchemy Documentation](https://docs.sqlalchemy.org/)
 - [Pydantic Documentation](https://docs.pydantic.dev/)
 - [Uvicorn Documentation](https://www.uvicorn.org/)
+- [Firebase Admin SDK Documentation](https://firebase.google.com/docs/admin/setup)
+- [FastAPI WebSockets](https://fastapi.tiangolo.com/advanced/websockets/)
 
 ### Project Documentation
 Detailed guides are available in the `docs/` folder:
