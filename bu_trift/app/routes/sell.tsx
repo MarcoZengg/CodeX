@@ -1,9 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import type { FormEvent } from "react";
 import type { Route } from "./+types/sell";
-import { Item } from "@/entities";
-import type { Item as ItemType } from "@/entities/Item";
-import type { User as UserType } from "@/entities/User";
 import { useNavigate } from "react-router";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,8 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Upload, X, Camera, Plus, DollarSign } from "lucide-react";
 import { motion } from "framer-motion";
-import type { ItemCategory, ItemCondition } from "@/entities/Item";
-import { API_URL } from "../config"; // <-- make sure path matches your project
+import type { ItemCategory, ItemCondition, Item as ItemType } from "@/entities/Item";
+import { ItemEntity } from "@/entities/Item";
+import { API_URL } from "../config";
 
 const categories: { value: ItemCategory | ""; label: string }[] = [
   { value: "textbooks", label: "Textbooks" },
@@ -60,28 +58,21 @@ export function meta({}: Route.MetaArgs) {
 export default function Sell() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [firebaseToken, setFirebaseToken] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
-  const [currentUser, setCurrentUser] = useState<UserType | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
 
-  // Load current user from localStorage 
-  // Purpose: remember "you're logged in" in this browser
+  // Load Firebase token & redirect if missing
   useEffect(() => {
-    const storedUser = localStorage.getItem("currentUser");
-    if (storedUser) {
-      try {
-        const user = JSON.parse(storedUser) as UserType;
-        setCurrentUser(user);
-      } catch (error) {
-        console.error("Error parsing stored user:", error);
-      }
-    } else {
-      // If not logged in, redirect to login page
+    const token = localStorage.getItem("firebaseToken");
+    if (!token) {
       navigate(createPageUrl("Login"));
+      return;
     }
+    setFirebaseToken(token);
   }, [navigate]);
-  
+
   const [formData, setFormData] = useState<FormData>({
     title: "",
     description: "",
@@ -100,9 +91,9 @@ export default function Sell() {
     }));
   };
 
-  // REAL FILE UPLOAD: sends files to FastAPI /api/upload-image
+  // Image upload with Firebase token authentication
   const handleFileUpload = async (files: FileList | null) => {
-    if (!files) return;
+    if (!files || !firebaseToken) return;
 
     setUploadingImages(true);
     const uploadedURLs: string[] = [];
@@ -114,12 +105,13 @@ export default function Sell() {
 
         const res = await fetch(`${API_URL}/api/upload-image`, {
           method: "POST",
+          headers: { Authorization: `Bearer ${firebaseToken}` },
           body: data,
         });
 
         if (!res.ok) throw new Error("Image upload failed");
 
-        const json = await res.json(); // { url: "http://localhost:8000/uploads/..." }
+        const json = await res.json();
         uploadedURLs.push(json.url);
       }
 
@@ -157,17 +149,14 @@ export default function Sell() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+
+    if (!firebaseToken) {
+      navigate(createPageUrl("Login"));
+      return;
+    }
     setIsSubmitting(true);
 
     try {
-      // Check if user is logged in
-      if (!currentUser || !currentUser.id) {
-        alert("Please log in to create a listing");
-        navigate(createPageUrl("Login"));
-        setIsSubmitting(false);
-        return;
-      }
-
       // Validate required fields
       if (!formData.category || !formData.condition) {
         alert("Please select both category and condition");
@@ -196,21 +185,20 @@ export default function Sell() {
       // Clear image error if images are present
       setImageError(null);
 
-      // Prepare data for backend - use the actual logged-in user's ID
-      const itemData: ItemType = {
+      // MUST NOT send seller_id — backend derives from Firebase token
+      const payload: Partial<ItemType> = {
         title: formData.title,
         description: formData.description,
         price: parseFloat(formData.price),
-        category: formData.category as ItemType["category"],
-        condition: formData.condition as ItemType["condition"],
-        seller_id: currentUser.id,
+        category: formData.category,
+        condition: formData.condition,
         location: formData.location || undefined,
         is_negotiable: formData.is_negotiable,
-        images: formData.images || [], // Ensure images is always an array
+        images: formData.images || [],
       };
 
-      console.log("Creating item with images:", itemData.images); // Debug log
-      await Item.create(itemData);
+      console.log("Creating item with images:", payload.images);
+      await ItemEntity.create(payload);
 
       navigate(createPageUrl("Home"));
     } catch (error) {
@@ -221,8 +209,8 @@ export default function Sell() {
     }
   };
 
-  // Show loading state while checking user
-  if (!currentUser) {
+  // Show loading state while checking token
+  if (!firebaseToken) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-white to-neutral-50 p-6 flex items-center justify-center">
         <div className="text-center">

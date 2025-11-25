@@ -1,6 +1,14 @@
 // Import API URL from config
 import { API_URL } from "../config";
 
+// Import Firebase
+import { auth } from "../config/firebase";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
+
 export interface User {
   id?: string;
   display_name?: string;
@@ -25,110 +33,147 @@ export interface UserLogin {
   password: string;
 }
 
-// Entity class for User operations (Simple - no authentication yet)
+/** Body sent to backend when creating profile */
+export interface UserProfileCreate {
+  email: string;
+  display_name: string;
+  bio?: string;
+}
+
+/* AUTH HEADERS*/
+function getAuthHeaders(includeJSON: boolean = true): HeadersInit {
+  const token = localStorage.getItem("firebaseToken");
+  const headers: HeadersInit = {};
+
+  if (includeJSON) headers["Content-Type"] = "application/json";
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  return headers;
+}
+
+/* USER ENTITY (Firebase + Backend) */
 export class UserEntity {
   /**
-   * Register a new user
-   * Simple registration - no JWT tokens or authentication
+   * REGISTER:
+   *  1) Firebase createUserWithEmailAndPassword
+   *  2) Get Firebase ID token
+   *  3) Call backend /api/users/create-profile
    */
   static async register(userData: UserRegister): Promise<User> {
-    try {
-      const response = await fetch(`${API_URL}/api/users/register`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(userData),
-      });
+    // 1 — Firebase signup
+    const cred = await createUserWithEmailAndPassword(
+      auth,
+      userData.email.trim(),
+      userData.password
+    );
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.detail || `Failed to register: ${response.statusText}`;
-        throw new Error(errorMessage);
-      }
+    // 2 — Get Firebase ID token
+    const idToken = await cred.user.getIdToken();
+    localStorage.setItem("firebaseToken", idToken);
 
-      const user: User = await response.json();
-      return user;
-    } catch (error) {
-      console.error("Error registering user:", error);
-      throw error;
+    // 3 — Create profile in backend
+    const profileBody: UserProfileCreate = {
+      email: userData.email.trim().toLowerCase(),
+      display_name: userData.display_name.trim(),
+      bio: userData.bio?.trim(),
+    };
+
+    const response = await fetch(`${API_URL}/api/users/create-profile`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify(profileBody),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || "Failed to create profile");
     }
+
+    const user: User = await response.json();
+    localStorage.setItem("currentUser", JSON.stringify(user));
+
+    return user;
+
   }
 
   /**
-   * Login user - verify email and password
+   * LOGIN:
+   * 1) Firebase signInWithEmailAndPassword
+   * 2) Get Firebase ID token
+   * 3) Call backend /api/users/me
    */
   static async login(credentials: UserLogin): Promise<User> {
-    try {
-      const response = await fetch(`${API_URL}/api/users/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(credentials),
-      });
+    // 1 — Firebase sign in
+    const cred = await signInWithEmailAndPassword(
+      auth,
+      credentials.email,
+      credentials.password
+    );
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.detail || `Failed to login: ${response.statusText}`;
-        throw new Error(errorMessage);
-      }
+    // 2 — ID token
+    const idToken = await cred.user.getIdToken();
+    localStorage.setItem("firebaseToken", idToken);
 
-      const user: User = await response.json();
-      return user;
-    } catch (error) {
-      console.error("Error logging in:", error);
-      throw error;
+    // 3 — load profile from backend
+    const response = await fetch(`${API_URL}/api/users/me`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || "Failed to load profile");
     }
+
+    const user: User = await response.json();
+    localStorage.setItem("currentUser", JSON.stringify(user));
+
+    return user;
+  }
+
+  /** Load current user from backend (requires token) */
+  static async me(): Promise<User | null> {
+    const token = localStorage.getItem("firebaseToken");
+    if (!token) return null;
+
+    const response = await fetch(`${API_URL}/api/users/me`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) return null;
+    return response.json();
   }
 
   /**
    * Get user by ID (public profile)
    */
   static async getById(userId: string): Promise<User> {
-    try {
-      const response = await fetch(`${API_URL}/api/users/${userId}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+    const response = await fetch(`${API_URL}/api/users/${userId}`, {
+      method: "GET",
+      headers: getAuthHeaders(false), // no JSON needed
+    });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.detail || `Failed to get user: ${response.statusText}`;
-        throw new Error(errorMessage);
-      }
-
-      const user: User = await response.json();
-      return user;
-    } catch (error) {
-      console.error("Error getting user by ID:", error);
-      throw error;
+    if (!response.ok) {
+      const e = await response.json().catch(() => ({}));
+      throw new Error(e.detail || "Failed to get user");
     }
+
+    return response.json();
   }
 
-  /**
-   * Get current user (mock for now - will add authentication later)
-   */
-  static async me(): Promise<User> {
-    // Mock implementation for development
-    // Authentication will be added later
-    const mockUser: User = {
-      id: "current_user",
-      display_name: "BU Student",
-      email: "student@bu.edu",
-      profile_image_url: "",
-      rating: 4.8,
-      total_sales: 12,
-      is_verified: true,
-      bio: "Current BU student",
-    };
-    
-    // Simulate network delay for Safari compatibility
-    return new Promise((resolve) => {
-      setTimeout(() => resolve(mockUser), 100);
-    });
+  /** Logout */
+  static async logout(): Promise<void> {
+    await signOut(auth);
+    localStorage.removeItem("firebaseToken");
+    localStorage.removeItem("currentUser");
   }
 }
 

@@ -30,3 +30,8 @@ env/
 *.swp
 *.swo
 *~
+
+# Firebase credentials - NEVER commit these!
+firebase_service.json
+**/firebase_service.json
+backend/firebase_service.json

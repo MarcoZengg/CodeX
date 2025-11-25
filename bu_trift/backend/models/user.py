@@ -7,8 +7,9 @@ class UserDB(Base):
     
     id = Column(String, primary_key=True, index=True)
     email = Column(String, unique=True, nullable=False, index=True)
+    firebase_uid = Column(String, unique=True, nullable=False)  # Firebase user ID
     display_name = Column(String, nullable=False)
-    password_hash = Column(String, nullable=False)  # Hashed password, never store plain text
+    # password_hash = Column(String, nullable=False)  # Hashed password, never store plain text
     is_verified = Column(Boolean, default=False)
     profile_image_url = Column(String)
     bio = Column(String)

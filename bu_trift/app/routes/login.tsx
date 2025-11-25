@@ -1,8 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type { Route } from "./+types/login";
-import { User } from "@/entities";
-import type { UserLogin } from "@/entities/User";
 import { useNavigate, Link } from "react-router";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
 import { LogIn, Mail, Lock } from "lucide-react";
+// Firebase imports
+import { auth } from "@/config/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
+
+import { API_URL } from "@/config";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -23,7 +26,9 @@ export default function Login(_props: Route.ComponentProps) {
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [formData, setFormData] = useState<UserLogin>({
+
+  // Firebase login form
+  const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
@@ -34,38 +39,76 @@ export default function Login(_props: Route.ComponentProps) {
     setError(null);
 
     try {
-      // Validate required fields
+      // Basic validation
       if (!formData.email || !formData.password) {
         setError("Please enter both email and password");
         setIsSubmitting(false);
         return;
       }
 
-      // Prepare data
-      const credentials: UserLogin = {
-        email: formData.email.trim(),
-        password: formData.password,
-      };
+      // Sign in with Firebase
+      const cred = await signInWithEmailAndPassword(
+        auth,
+        formData.email.trim(),
+        formData.password
+      );
 
-      // Call login API
-      const user = await User.login(credentials);
+      // Get Firebase ID token
+      const idToken = await cred.user.getIdToken(true);
+      localStorage.setItem("firebaseToken", idToken);
 
-      // Store user in localStorage (temporary - will use JWT later)
+      // Load user profile from FastAPI
+      const response = await fetch(`${API_URL}/api/users/me`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Failed to load profile");
+      }
+
+      const user = await response.json();
+
+      //Save current user
       localStorage.setItem("currentUser", JSON.stringify(user));
 
-      // Redirect to profile page
+      //Redirect
       navigate(createPageUrl("Profile"));
-    } catch (error) {
-      console.error("Error logging in:", error);
-      setError(error instanceof Error ? error.message : "Incorrect email or password. Please try again.");
+    } catch (err) {
+      console.error("Error logging in:", err);
+      // Enhanced error messages for Firebase auth errors
+      let errorMessage = "Failed to sign in. Please try again.";
+      if (err instanceof Error) {
+        const errorCode = (err as any).code;
+        if (errorCode === "auth/invalid-email") {
+          errorMessage = "Invalid email address.";
+        } else if (errorCode === "auth/user-disabled") {
+          errorMessage = "This account has been disabled.";
+        } else if (errorCode === "auth/user-not-found") {
+          errorMessage = "No account found with this email.";
+        } else if (errorCode === "auth/wrong-password") {
+          errorMessage = "Incorrect password.";
+        } else if (errorCode === "auth/network-request-failed") {
+          errorMessage = "Network error. Please check your connection.";
+        } else if (errorCode === "auth/too-many-requests") {
+          errorMessage = "Too many failed attempts. Please try again later.";
+        } else if (err.message.includes("Failed to load profile")) {
+          errorMessage = "Login successful but could not load profile. Please try again.";
+        } else {
+          errorMessage = err.message || errorMessage;
+        }
+      }
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleChange = (field: keyof UserLogin, value: string) => {
+  const handleChange = (field: "email" | "password", value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-    // Clear error when user starts typing
     if (error) setError(null);
   };
 
@@ -82,11 +125,14 @@ export default function Login(_props: Route.ComponentProps) {
             <div className="mx-auto w-16 h-16 bg-gradient-to-br from-red-600 to-red-700 rounded-2xl flex items-center justify-center mb-4 shadow-lg">
               <LogIn className="w-8 h-8 text-white" />
             </div>
-            <CardTitle className="text-3xl font-bold text-neutral-900">Welcome Back</CardTitle>
+            <CardTitle className="text-3xl font-bold text-neutral-900">
+              Welcome Back
+            </CardTitle>
             <CardDescription className="text-neutral-600">
               Sign in to your BUTrift account to continue
             </CardDescription>
           </CardHeader>
+
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
@@ -101,11 +147,11 @@ export default function Login(_props: Route.ComponentProps) {
 
               {/* Email */}
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-neutral-700 font-semibold">
+                <Label className="text-neutral-700 font-semibold">
                   BU Email
                 </Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-neutral-400" />
+                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 w-5 h-5" />
                   <Input
                     id="email"
                     type="email"
@@ -114,18 +160,17 @@ export default function Login(_props: Route.ComponentProps) {
                     onChange={(e) => handleChange("email", e.target.value)}
                     className="pl-10 h-12"
                     required
-                    autoComplete="email"
                   />
                 </div>
               </div>
 
               {/* Password */}
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-neutral-700 font-semibold">
+                <Label className="text-neutral-700 font-semibold">
                   Password
                 </Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-neutral-400" />
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 w-5 h-5" />
                   <Input
                     id="password"
                     type="password"
@@ -134,44 +179,29 @@ export default function Login(_props: Route.ComponentProps) {
                     onChange={(e) => handleChange("password", e.target.value)}
                     className="pl-10 h-12"
                     required
-                    autoComplete="current-password"
                   />
                 </div>
               </div>
 
-              {/* Submit Button */}
+              {/* Submit button */}
               <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full h-12 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-semibold text-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed mt-6 box-border min-w-0 transition-none will-change-auto"
-                style={{
-                  boxSizing: 'border-box',
-                  WebkitAppearance: 'none',
-                  WebkitTapHighlightColor: 'transparent',
-                }}
+                className="w-full h-12 bg-red-600 hover:bg-red-700 text-white font-semibold text-lg"
               >
-                {isSubmitting ? (
-                  <span className="flex items-center gap-2">
-                    <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Signing In...
-                  </span>
-                ) : (
-                  "Sign In"
-                )}
+                {isSubmitting ? "Signing In..." : "Sign In"}
               </Button>
 
-              {/* Register Link */}
-              <div className="text-center pt-4">
-                <p className="text-sm text-neutral-600">
-                  Don't have an account?{" "}
-                  <Link
-                    to={createPageUrl("Register")}
-                    className="text-red-600 hover:text-red-700 font-semibold underline"
-                  >
-                    Create account
-                  </Link>
-                </p>
-              </div>
+              {/* Register link */}
+              <p className="text-center text-sm text-neutral-600 pt-4">
+                Don't have an account?{" "}
+                <Link
+                  to={createPageUrl("Register")}
+                  className="text-red-600 hover:text-red-700 font-semibold underline"
+                >
+                  Create account
+                </Link>
+              </p>
             </form>
           </CardContent>
         </Card>
@@ -179,4 +209,3 @@ export default function Login(_props: Route.ComponentProps) {
     </div>
   );
 }
-
