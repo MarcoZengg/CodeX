@@ -7,15 +7,28 @@ export class WebSocketClient {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 3000; // 3 seconds
+  private apiUrl: string = API_URL;
+  private isManualDisconnect: boolean = false;
 
   constructor(userId: string) {
     this.userId = userId;
   }
 
-  connect(apiUrl: string = API_URL) {
+  connect(apiUrl: string = API_URL, token?: string) {
+    // Get token from localStorage if not provided
+    const authToken = token || localStorage.getItem("firebaseToken");
+    if (!authToken) {
+      console.error("No authentication token available for WebSocket connection");
+      return;
+    }
+    
+    this.apiUrl = apiUrl;
+    this.isManualDisconnect = false;
+    
     // Convert http:// to ws:// and https:// to wss://
     const wsUrl = apiUrl.replace('http://', 'ws://').replace('https://', 'wss://');
-    const fullUrl = `${wsUrl}/ws/${this.userId}`;
+    // Include token as query parameter
+    const fullUrl = `${wsUrl}/ws/${this.userId}?token=${encodeURIComponent(authToken)}`;
     
     try {
       this.ws = new WebSocket(fullUrl);
@@ -42,12 +55,16 @@ export class WebSocketClient {
 
       this.ws.onclose = () => {
         console.log('WebSocket disconnected');
-        // Attempt to reconnect if not manually closed
-        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+        // Attempt to reconnect if not manually closed and haven't exceeded max attempts
+        if (!this.isManualDisconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
           this.reconnectAttempts++;
           console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
           setTimeout(() => {
-            this.connect(apiUrl);
+            // Get fresh token for reconnection
+            const freshToken = localStorage.getItem("firebaseToken");
+            if (freshToken) {
+              this.connect(this.apiUrl, freshToken);
+            }
           }, this.reconnectDelay);
         }
       };
@@ -69,6 +86,7 @@ export class WebSocketClient {
   }
 
   disconnect() {
+    this.isManualDisconnect = true;
     if (this.ws) {
       this.ws.close();
       this.ws = null;

@@ -17,6 +17,17 @@ export interface Conversation {
   last_message_snippet?: string; // For backward compatibility
 }
 
+// Helper function to get auth headers
+function getAuthHeaders(includeJSON: boolean = true): HeadersInit {
+  const token = localStorage.getItem("firebaseToken");
+  const headers: HeadersInit = {};
+
+  if (includeJSON) headers["Content-Type"] = "application/json";
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  return headers;
+}
+
 // Entity class for Conversation operations
 export class ConversationEntity {
   /**
@@ -40,9 +51,7 @@ export class ConversationEntity {
 
       const response = await fetch(`${API_URL}/api/conversations`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           participant1_id,
           participant2_id,
@@ -80,9 +89,7 @@ export class ConversationEntity {
         const userId = filters.participant_ids.value;
         const response = await fetch(`${API_URL}/api/conversations?user_id=${userId}`, {
           method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: getAuthHeaders(),
         });
 
         if (!response.ok) {

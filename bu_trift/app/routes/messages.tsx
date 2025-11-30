@@ -115,9 +115,10 @@ export default function Messages() {
               });
               setParticipantUsers(usersMap);
 
-              // Connect WebSocket for real-time messaging
+              // Connect WebSocket for real-time messaging with token
+              const token = localStorage.getItem("firebaseToken");
               const wsClient = new WebSocketClient(user.id);
-              wsClient.connect(API_URL);
+              wsClient.connect(API_URL, token || undefined);
               wsClient.onMessage((data) => {
                 if (data.type === "new_message") {
                   const newMsg = data.data;

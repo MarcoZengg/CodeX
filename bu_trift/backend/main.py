@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, WebSocket, WebSocketDisconnect, Query
 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -13,12 +13,15 @@ from models.message import MessageDB
 import uuid
 from datetime import datetime
 import os
+import logging
 
 # NEW: import Firebase auth verification
 from auth import verify_token
 
 # Ensure firebase_admin initializes
 import firebase_config  # noqa: F401
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -200,11 +203,45 @@ async def upload_image(
     file: UploadFile = File(...),
     token_data: dict = Depends(verify_token),
 ):
-    file_path = os.path.join("uploads", file.filename)
+    # Validate file type
+    allowed_extensions = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    if file_ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed types: {', '.join(allowed_extensions)}"
+        )
+    
+    # Validate file size (5MB limit)
+    MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB in bytes
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File size exceeds maximum allowed size of 5MB"
+        )
+    
+    # Sanitize filename to prevent path traversal
+    import re
+    safe_filename = re.sub(r'[^a-zA-Z0-9._-]', '_', file.filename)
+    # Add timestamp to ensure uniqueness
+    import time
+    safe_filename = f"{int(time.time())}_{safe_filename}"
+    
+    # Ensure filename doesn't exceed reasonable length
+    if len(safe_filename) > 255:
+        name, ext = os.path.splitext(safe_filename)
+        safe_filename = name[:250] + ext
+    
+    file_path = os.path.join("uploads", safe_filename)
+    
+    # Write file
     with open(file_path, "wb") as f:
-        f.write(await file.read())
-
-    url = f"http://localhost:8000/uploads/{file.filename}"
+        f.write(content)
+    
+    # Use environment variable for base URL if available, otherwise localhost
+    base_url = os.getenv("API_BASE_URL", "http://localhost:8000")
+    url = f"{base_url}/uploads/{safe_filename}"
     return {"url": url}
 
 
@@ -254,31 +291,39 @@ def create_item(
     token_data: dict = Depends(verify_token),
     db: Session = Depends(get_db),
 ):
+    # Validate price
+    if item.price <= 0:
+        raise HTTPException(status_code=400, detail="Price must be greater than 0")
+    
     firebase_uid = token_data["uid"]
 
     user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
     if not user:
         raise HTTPException(404, "User not found")
 
-    new_item = ItemDB(
-        id=str(uuid.uuid4()),
-        title=item.title,
-        description=item.description,
-        price=item.price,
-        category=item.category,
-        condition=item.condition,
-        seller_id=user.id,  # Seller is authenticated user
-        status="available",
-        location=item.location,
-        is_negotiable=item.is_negotiable,
-        created_date=datetime.now(),
-        images=item.images or [],
-    )
+    try:
+        new_item = ItemDB(
+            id=str(uuid.uuid4()),
+            title=item.title,
+            description=item.description,
+            price=item.price,
+            category=item.category,
+            condition=item.condition,
+            seller_id=user.id,  # Seller is authenticated user
+            status="available",
+            location=item.location,
+            is_negotiable=item.is_negotiable,
+            created_date=datetime.now(),
+            images=item.images or [],
+        )
 
-    db.add(new_item)
-    db.commit()
-    db.refresh(new_item)
-    return item_to_response(new_item)
+        db.add(new_item)
+        db.commit()
+        db.refresh(new_item)
+        return item_to_response(new_item)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create item: {str(e)}")
 
 
 # ============================
@@ -304,23 +349,27 @@ def create_profile(
     if existing:
         raise HTTPException(400, "User already exists")
 
-    new_user = UserDB(
-        id=str(uuid.uuid4()),
-        firebase_uid=firebase_uid,
-        email=user_data.email.lower(),
-        display_name=user_data.display_name,
-        is_verified=True,
-        bio=user_data.bio,
-        rating=0.0,
-        total_sales=0,
-        created_date=datetime.now(),
-    )
+    try:
+        new_user = UserDB(
+            id=str(uuid.uuid4()),
+            firebase_uid=firebase_uid,
+            email=user_data.email.lower(),
+            display_name=user_data.display_name,
+            is_verified=True,
+            bio=user_data.bio,
+            rating=0.0,
+            total_sales=0,
+            created_date=datetime.now(),
+        )
 
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
 
-    return user_to_response(new_user)
+        return user_to_response(new_user)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create profile: {str(e)}")
 
 
 @app.get("/api/users/me", response_model=UserResponse)
@@ -398,19 +447,54 @@ manager = ConnectionManager()
 # WebSocket Endpoint
 # ==========================
 
-@app.websocket("/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: str):
-    """WebSocket endpoint for real-time messaging"""
-    await manager.connect(websocket, user_id)
+async def verify_websocket_token(token: str) -> Optional[dict]:
+    """Verify Firebase token from WebSocket connection"""
     try:
-        while True:
-            # Keep connection alive and listen for messages
-            # You can handle incoming WebSocket messages here if needed
-            data = await websocket.receive_text()
-            # Optional: Process incoming messages from client
-            # For now, we just keep the connection alive
-    except WebSocketDisconnect:
-        manager.disconnect(websocket, user_id)
+        from firebase_admin import auth as firebase_auth
+        decoded = firebase_auth.verify_id_token(token)
+        return decoded
+    except Exception as e:
+        logger.error(f"WebSocket token verification failed: {e}")
+        return None
+
+@app.websocket("/ws/{user_id}")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    user_id: str,
+    token: str = Query(..., description="Firebase authentication token")
+):
+    """WebSocket endpoint for real-time messaging with authentication"""
+    # Verify token from query parameter
+    token_data = await verify_websocket_token(token)
+    if not token_data:
+        await websocket.close(code=1008, reason="Invalid authentication token")
+        return
+    
+    # Verify user_id matches token
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        user = db.query(UserDB).filter(UserDB.firebase_uid == token_data["uid"]).first()
+        if not user:
+            await websocket.close(code=1008, reason="User not found")
+            return
+        
+        if user.id != user_id:
+            await websocket.close(code=1008, reason="User ID mismatch")
+            return
+        
+        await manager.connect(websocket, user_id)
+        try:
+            while True:
+                # Keep connection alive and listen for messages
+                # You can handle incoming WebSocket messages here if needed
+                data = await websocket.receive_text()
+                # Optional: Process incoming messages from client
+                # For now, we just keep the connection alive
+        except WebSocketDisconnect:
+            manager.disconnect(websocket, user_id)
+    finally:
+        db.close()
 
 # ==========================
 # Messaging Endpoints
@@ -418,8 +502,30 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
 # Conversations CRUD
 @app.post("/api/conversations", response_model=ConversationResponse)
-def create_conversation(conversation: ConversationCreate, db: Session = Depends(get_db)):
+def create_conversation(
+    conversation: ConversationCreate,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
     """Create a new conversation between two users"""
+    
+    firebase_uid = token_data["uid"]
+    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Verify that current user is participant1_id
+    if conversation.participant1_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only create conversations as yourself")
+    
+    # Verify that participant2 exists
+    participant2 = db.query(UserDB).filter(UserDB.id == conversation.participant2_id).first()
+    if not participant2:
+        raise HTTPException(status_code=404, detail="Other participant not found")
+    
+    # Prevent self-conversations
+    if conversation.participant1_id == conversation.participant2_id:
+        raise HTTPException(status_code=400, detail="Cannot create conversation with yourself")
     
     # Check if conversation already exists between these two users
     existing = db.query(ConversationDB).filter(
@@ -433,23 +539,40 @@ def create_conversation(conversation: ConversationCreate, db: Session = Depends(
         # Return existing conversation instead of creating duplicate
         return conversation_to_response(existing)
     
-    # Create new conversation
-    new_conversation = ConversationDB(
-        id=str(uuid.uuid4()),
-        participant1_id=conversation.participant1_id,
-        participant2_id=conversation.participant2_id,
-        item_id=conversation.item_id,
-    )
-    
-    db.add(new_conversation)
-    db.commit()
-    db.refresh(new_conversation)
-    
-    return conversation_to_response(new_conversation)
+    try:
+        # Create new conversation
+        new_conversation = ConversationDB(
+            id=str(uuid.uuid4()),
+            participant1_id=conversation.participant1_id,
+            participant2_id=conversation.participant2_id,
+            item_id=conversation.item_id,
+        )
+        
+        db.add(new_conversation)
+        db.commit()
+        db.refresh(new_conversation)
+        
+        return conversation_to_response(new_conversation)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create conversation: {str(e)}")
 
 @app.get("/api/conversations", response_model=List[ConversationResponse])
-def get_conversations(user_id: str, db: Session = Depends(get_db)):
+def get_conversations(
+    user_id: str,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
     """Get all conversations for a specific user"""
+    firebase_uid = token_data["uid"]
+    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Verify that user can only access their own conversations
+    if user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only access your own conversations")
+    
     conversations = db.query(ConversationDB).filter(
         (ConversationDB.participant1_id == user_id) |
         (ConversationDB.participant2_id == user_id)
@@ -458,46 +581,111 @@ def get_conversations(user_id: str, db: Session = Depends(get_db)):
     return [conversation_to_response(conv) for conv in conversations]
 
 @app.get("/api/conversations/{conversation_id}", response_model=ConversationResponse)
-def get_conversation(conversation_id: str, db: Session = Depends(get_db)):
+def get_conversation(
+    conversation_id: str,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
     """Get a specific conversation by ID"""
+    firebase_uid = token_data["uid"]
+    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
     conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    # Verify user is a participant
+    if current_user.id not in [conversation.participant1_id, conversation.participant2_id]:
+        raise HTTPException(status_code=403, detail="You are not a participant in this conversation")
+    
     return conversation_to_response(conversation)
 
 @app.put("/api/conversations/{conversation_id}", response_model=ConversationResponse)
 def update_conversation(
     conversation_id: str,
     item_id: Optional[str] = None,
+    token_data: dict = Depends(verify_token),
     db: Session = Depends(get_db)
 ):
     """Update conversation (e.g., update item_id or last_message_at)"""
+    firebase_uid = token_data["uid"]
+    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
     conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     
-    if item_id is not None:
-        conversation.item_id = item_id
+    # Verify user is a participant
+    if current_user.id not in [conversation.participant1_id, conversation.participant2_id]:
+        raise HTTPException(status_code=403, detail="You are not a participant in this conversation")
     
-    db.commit()
-    db.refresh(conversation)
-    return conversation_to_response(conversation)
+    try:
+        if item_id is not None:
+            conversation.item_id = item_id
+        
+        db.commit()
+        db.refresh(conversation)
+        return conversation_to_response(conversation)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update conversation: {str(e)}")
 
 @app.delete("/api/conversations/{conversation_id}")
-def delete_conversation(conversation_id: str, db: Session = Depends(get_db)):
+def delete_conversation(
+    conversation_id: str,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db)
+):
     """Delete a conversation and all its messages"""
+    firebase_uid = token_data["uid"]
+    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
     conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     
-    db.delete(conversation)
-    db.commit()
-    return {"message": "Conversation deleted successfully"}
+    # Verify user is a participant
+    if current_user.id not in [conversation.participant1_id, conversation.participant2_id]:
+        raise HTTPException(status_code=403, detail="You are not a participant in this conversation")
+    
+    try:
+        db.delete(conversation)
+        db.commit()
+        return {"message": "Conversation deleted successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete conversation: {str(e)}")
 
 # Messages CRUD
 @app.post("/api/messages", response_model=MessageResponse)
-async def create_message(message: MessageCreate, db: Session = Depends(get_db)):
+async def create_message(
+    message: MessageCreate,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
     """Create a new message in a conversation and broadcast via WebSocket"""
+    
+    # Validate message content
+    content = message.content.strip()
+    if not content or len(content) == 0:
+        raise HTTPException(status_code=400, detail="Message content cannot be empty")
+    if len(content) > 5000:
+        raise HTTPException(status_code=400, detail="Message content cannot exceed 5000 characters")
+    
+    firebase_uid = token_data["uid"]
+    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Verify sender is authenticated user
+    if message.sender_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only send messages as yourself")
     
     # Verify conversation exists
     conversation = db.query(ConversationDB).filter(ConversationDB.id == message.conversation_id).first()
@@ -506,44 +694,66 @@ async def create_message(message: MessageCreate, db: Session = Depends(get_db)):
     
     # Verify sender is a participant
     if message.sender_id not in [conversation.participant1_id, conversation.participant2_id]:
-        raise HTTPException(status_code=403, detail="Sender is not a participant in this conversation")
+        raise HTTPException(status_code=403, detail="You are not a participant in this conversation")
     
-    # Create new message
-    new_message = MessageDB(
-        id=str(uuid.uuid4()),
-        conversation_id=message.conversation_id,
-        sender_id=message.sender_id,
-        content=message.content,
-        is_read=False,
-    )
-    
-    db.add(new_message)
-    
-    # Update conversation's last_message_at
-    conversation.last_message_at = datetime.now()
-    
-    db.commit()
-    db.refresh(new_message)
-    
-    # Convert to response format
-    message_response = message_to_response(new_message)
-    
-    # Broadcast new message via WebSocket to conversation participants
-    await manager.broadcast_to_conversation(
-        {
-            "type": "new_message",
-            "data": message_response
-        },
-        message.conversation_id,
-        message.sender_id,
-        db
-    )
-    
-    return message_response
+    try:
+        # Create new message
+        new_message = MessageDB(
+            id=str(uuid.uuid4()),
+            conversation_id=message.conversation_id,
+            sender_id=message.sender_id,
+            content=content,  # Use validated content
+            is_read=False,
+        )
+        
+        db.add(new_message)
+        
+        # Update conversation's last_message_at
+        conversation.last_message_at = datetime.now()
+        
+        db.commit()
+        db.refresh(new_message)
+        
+        # Convert to response format
+        message_response = message_to_response(new_message)
+        
+        # Broadcast new message via WebSocket to conversation participants
+        await manager.broadcast_to_conversation(
+            {
+                "type": "new_message",
+                "data": message_response
+            },
+            message.conversation_id,
+            message.sender_id,
+            db
+        )
+        
+        return message_response
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create message: {str(e)}")
 
 @app.get("/api/messages", response_model=List[MessageResponse])
-def get_messages(conversation_id: str, db: Session = Depends(get_db)):
+def get_messages(
+    conversation_id: str,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
     """Get all messages in a conversation"""
+    firebase_uid = token_data["uid"]
+    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Verify conversation exists
+    conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    # Verify user is a participant
+    if current_user.id not in [conversation.participant1_id, conversation.participant2_id]:
+        raise HTTPException(status_code=403, detail="You are not a participant in this conversation")
+    
     messages = db.query(MessageDB).filter(
         MessageDB.conversation_id == conversation_id
     ).order_by(MessageDB.created_date.asc()).all()
@@ -551,53 +761,126 @@ def get_messages(conversation_id: str, db: Session = Depends(get_db)):
     return [message_to_response(msg) for msg in messages]
 
 @app.get("/api/messages/{message_id}", response_model=MessageResponse)
-def get_message(message_id: str, db: Session = Depends(get_db)):
+def get_message(
+    message_id: str,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db)
+):
     """Get a specific message by ID"""
+    firebase_uid = token_data["uid"]
+    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
     message = db.query(MessageDB).filter(MessageDB.id == message_id).first()
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
+    
+    # Verify user is a participant in the conversation
+    conversation = db.query(ConversationDB).filter(ConversationDB.id == message.conversation_id).first()
+    if conversation and current_user.id not in [conversation.participant1_id, conversation.participant2_id]:
+        raise HTTPException(status_code=403, detail="You are not a participant in this conversation")
+    
     return message_to_response(message)
 
 @app.put("/api/messages/{message_id}", response_model=MessageResponse)
 def update_message(
     message_id: str,
     message_update: MessageUpdate,
+    token_data: dict = Depends(verify_token),
     db: Session = Depends(get_db)
 ):
     """Update a message (e.g., mark as read)"""
+    firebase_uid = token_data["uid"]
+    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
     message = db.query(MessageDB).filter(MessageDB.id == message_id).first()
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
     
-    if message_update.is_read is not None:
-        message.is_read = message_update.is_read
+    # Verify user is a participant in the conversation
+    conversation = db.query(ConversationDB).filter(ConversationDB.id == message.conversation_id).first()
+    if conversation and current_user.id not in [conversation.participant1_id, conversation.participant2_id]:
+        raise HTTPException(status_code=403, detail="You are not a participant in this conversation")
     
-    db.commit()
-    db.refresh(message)
-    return message_to_response(message)
+    try:
+        if message_update.is_read is not None:
+            message.is_read = message_update.is_read
+        
+        db.commit()
+        db.refresh(message)
+        return message_to_response(message)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update message: {str(e)}")
 
 @app.put("/api/conversations/{conversation_id}/mark-read")
-def mark_conversation_read(conversation_id: str, user_id: str, db: Session = Depends(get_db)):
+def mark_conversation_read(
+    conversation_id: str,
+    user_id: str,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
     """Mark all messages in a conversation as read for a specific user"""
-    messages = db.query(MessageDB).filter(
-        MessageDB.conversation_id == conversation_id,
-        MessageDB.sender_id != user_id,  # Only mark messages NOT sent by this user
-        MessageDB.is_read == False
-    ).all()
+    firebase_uid = token_data["uid"]
+    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User not found")
     
-    for message in messages:
-        message.is_read = True
+    # Verify user_id matches authenticated user
+    if user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only mark your own messages as read")
     
-    db.commit()
-    return {"message": f"Marked {len(messages)} messages as read"}
+    # Verify conversation exists and user is a participant
+    conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    if current_user.id not in [conversation.participant1_id, conversation.participant2_id]:
+        raise HTTPException(status_code=403, detail="You are not a participant in this conversation")
+    
+    try:
+        messages = db.query(MessageDB).filter(
+            MessageDB.conversation_id == conversation_id,
+            MessageDB.sender_id != user_id,  # Only mark messages NOT sent by this user
+            MessageDB.is_read == False
+        ).all()
+        
+        for message in messages:
+            message.is_read = True
+        
+        db.commit()
+        return {"message": f"Marked {len(messages)} messages as read"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to mark messages as read: {str(e)}")
 
 @app.delete("/api/messages/{message_id}")
-def delete_message(message_id: str, db: Session = Depends(get_db)):
+def delete_message(
+    message_id: str,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db)
+):
     """Delete a message"""
+    firebase_uid = token_data["uid"]
+    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
     message = db.query(MessageDB).filter(MessageDB.id == message_id).first()
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
     
-    db.delete(message)
-    db.commit()
-    return {"message": "Message deleted successfully"}
+    # Only allow sender to delete their own messages
+    if message.sender_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only delete your own messages")
+    
+    try:
+        db.delete(message)
+        db.commit()
+        return {"message": "Message deleted successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete message: {str(e)}")

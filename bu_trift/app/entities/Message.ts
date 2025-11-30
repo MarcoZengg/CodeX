@@ -32,6 +32,17 @@ export interface MessageCreate {
   content: string;
 }
 
+// Helper function to get auth headers
+function getAuthHeaders(includeJSON: boolean = true): HeadersInit {
+  const token = localStorage.getItem("firebaseToken");
+  const headers: HeadersInit = {};
+
+  if (includeJSON) headers["Content-Type"] = "application/json";
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  return headers;
+}
+
 // Entity class for Message operations
 export class MessageEntity {
   /**
@@ -41,9 +52,7 @@ export class MessageEntity {
     try {
       const response = await fetch(`${API_URL}/api/conversations`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify(data),
       });
 
@@ -66,9 +75,7 @@ export class MessageEntity {
     try {
       const response = await fetch(`${API_URL}/api/conversations?user_id=${userId}`, {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) {
@@ -89,9 +96,7 @@ export class MessageEntity {
     try {
       const response = await fetch(`${API_URL}/api/messages?conversation_id=${conversationId}`, {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) {
@@ -112,9 +117,7 @@ export class MessageEntity {
     try {
       const response = await fetch(`${API_URL}/api/messages`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify(data),
       });
 
@@ -137,9 +140,7 @@ export class MessageEntity {
     try {
       const response = await fetch(`${API_URL}/api/conversations/${conversationId}/mark-read?user_id=${userId}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) {
