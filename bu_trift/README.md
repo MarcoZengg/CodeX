@@ -60,11 +60,12 @@ According to the course requirements:
   - ✅ GET current user (`/api/users/me`) - Protected with Firebase
   - ✅ GET user by ID (`/api/users/{user_id}`) - Public
   - ✅ Firebase token verification on protected endpoints
-- ✅ **Messaging Service**: Complete with real-time WebSocket support
-  - ✅ Conversations CRUD (Create, Read, Update, Delete)
-  - ✅ Messages CRUD (Create, Read, Update, Delete)
-  - ✅ Real-time messaging via WebSocket (`/ws/{user_id}`)
+- ✅ **Messaging Service**: Complete with real-time WebSocket support and authentication
+  - ✅ Conversations CRUD (Create, Read, Update, Delete) - All protected with Firebase auth
+  - ✅ Messages CRUD (Create, Read, Update, Delete) - All protected with Firebase auth
+  - ✅ Real-time messaging via WebSocket (`/ws/{user_id}`) - Requires Firebase token authentication
   - ✅ Database persistence for conversations and messages
+  - ✅ Authorization checks ensure users can only access their own conversations
 
 #### Database
 - ✅ **SQLite Database**: `butrift.db` file (auto-generated)
@@ -94,11 +95,12 @@ According to the course requirements:
   - ✅ Images stored in `backend/uploads` directory
   - ✅ Image URLs saved in database `images` column (JSON array)
   - ✅ Images displayed in item cards and item details pages
-- ✅ **Messaging**: Fully implemented with real-time WebSocket support
-  - ✅ Conversations CRUD operations
-  - ✅ Messages CRUD operations
-  - ✅ Real-time messaging via WebSocket
+- ✅ **Messaging**: Fully implemented with real-time WebSocket support and authentication
+  - ✅ Conversations CRUD operations (all protected with Firebase authentication)
+  - ✅ Messages CRUD operations (all protected with Firebase authentication)
+  - ✅ Real-time messaging via WebSocket (requires Firebase token authentication)
   - ✅ Frontend messaging page with live updates
+  - ✅ Authorization ensures users can only access their own conversations
 
 ### ⏳ Pending Implementation
 
@@ -375,7 +377,7 @@ Or use a production ASGI server like Gunicorn with Uvicorn workers.
 **Item Endpoints:**
 - `GET /api/items` - Get all items (supports filtering by seller_id, category, condition, status)
 - `GET /api/items/{item_id}` - Get item by ID
-- `POST /api/items` - Create new item (with images support)
+- `POST /api/items` - Create new item (with images support, protected with Firebase, validates price > 0)
 
 **User Endpoints (Firebase Authentication):**
 - `POST /api/users/create-profile` - Create user profile (requires Firebase token) - Protected
@@ -383,24 +385,24 @@ Or use a production ASGI server like Gunicorn with Uvicorn workers.
 - `GET /api/users/{user_id}` - Get public user profile by ID - Public
 
 **Image Upload Endpoints:**
-- `POST /api/upload-image` - Upload a single image file (returns URL) - Protected with Firebase
+- `POST /api/upload-image` - Upload a single image file (returns URL) - Protected with Firebase, includes file validation (type, size, filename sanitization)
 - `GET /uploads/{filename}` - Serve uploaded images (static files)
 
-**Messaging Endpoints:**
-- `POST /api/conversations` - Create a new conversation
-- `GET /api/conversations` - Get all conversations for a user (query param: `user_id`)
-- `GET /api/conversations/{conversation_id}` - Get a specific conversation
-- `PUT /api/conversations/{conversation_id}` - Update conversation
-- `DELETE /api/conversations/{conversation_id}` - Delete conversation
-- `PUT /api/conversations/{conversation_id}/mark-read` - Mark all messages as read (query param: `user_id`)
-- `POST /api/messages` - Create a new message (broadcasts via WebSocket)
-- `GET /api/messages` - Get all messages in a conversation (query param: `conversation_id`)
-- `GET /api/messages/{message_id}` - Get a specific message
-- `PUT /api/messages/{message_id}` - Update a message
-- `DELETE /api/messages/{message_id}` - Delete a message
+**Messaging Endpoints (All Protected with Firebase Authentication):**
+- `POST /api/conversations` - Create a new conversation (requires auth, validates participants)
+- `GET /api/conversations` - Get all conversations for a user (query param: `user_id`, requires auth, verifies user_id)
+- `GET /api/conversations/{conversation_id}` - Get a specific conversation (requires auth, verifies participant)
+- `PUT /api/conversations/{conversation_id}` - Update conversation (requires auth, verifies participant)
+- `DELETE /api/conversations/{conversation_id}` - Delete conversation (requires auth, verifies participant)
+- `PUT /api/conversations/{conversation_id}/mark-read` - Mark all messages as read (query param: `user_id`, requires auth)
+- `POST /api/messages` - Create a new message (broadcasts via WebSocket, requires auth, validates content)
+- `GET /api/messages` - Get all messages in a conversation (query param: `conversation_id`, requires auth, verifies participant)
+- `GET /api/messages/{message_id}` - Get a specific message (requires auth, verifies participant)
+- `PUT /api/messages/{message_id}` - Update a message (requires auth, verifies participant)
+- `DELETE /api/messages/{message_id}` - Delete a message (requires auth, can only delete own messages)
 
 **WebSocket Endpoints:**
-- `WS /ws/{user_id}` - WebSocket connection for real-time messaging
+- `WS /ws/{user_id}?token={firebase_token}` - WebSocket connection for real-time messaging (requires Firebase token authentication)
 
 **Health Check:**
 - `GET /` - API health check
@@ -479,20 +481,84 @@ These provide automatic documentation for all API endpoints with the ability to 
 - **Frontend**: Users sign in/register using Firebase Authentication
 - **Backend**: Firebase Admin SDK verifies ID tokens on protected endpoints
 - **Token Storage**: Firebase ID tokens stored in browser `localStorage`
-- **Protected Endpoints**: All user-related and item creation endpoints require valid Firebase token
+- **Protected Endpoints**: All user-related, item creation, messaging, and WebSocket endpoints require valid Firebase token
+
+### Security Features
+
+#### Authentication & Authorization
+- ✅ **Firebase Token Verification**: All protected endpoints verify Firebase ID tokens
+- ✅ **WebSocket Authentication**: WebSocket connections require Firebase token in query parameter
+- ✅ **Authorization Checks**: Users can only access their own data (conversations, messages)
+- ✅ **User ID Verification**: Prevents impersonation attacks via user_id matching
+
+#### Input Validation
+- ✅ **Message Content Validation**: Empty messages rejected, 5000 character limit
+- ✅ **File Upload Validation**: 
+  - File type restriction (images only: jpg, jpeg, png, gif, webp)
+  - File size limit (5MB maximum)
+  - Filename sanitization (prevents path traversal attacks)
+  - Unique filename generation (prevents overwrites)
+- ✅ **Price Validation**: Items must have price > 0
+- ✅ **User Existence Verification**: Prevents creating conversations with invalid users
+- ✅ **Self-Conversation Prevention**: Users cannot create conversations with themselves
+
+#### Data Integrity
+- ✅ **Database Transaction Rollback**: All write operations wrapped in transactions with automatic rollback on errors
+- ✅ **Prevents Partial Data**: Failed operations don't leave orphaned records
+- ✅ **Session Management**: Proper database session handling for WebSocket connections (prevents connection leaks)
 
 ### Protected Endpoints
+
 The following endpoints require a valid Firebase authentication token in the `Authorization: Bearer <token>` header:
+
+**User Endpoints:**
 - `POST /api/users/create-profile`
 - `GET /api/users/me`
-- `POST /api/upload-image`
-- `POST /api/items`
-- `WS /ws/{user_id}` (WebSocket connections)
 
-### Security Notes
-- Firebase service account credentials (`firebase_service.json`) are **NOT** in Git
-- Each developer must add their own `firebase_service.json` file
-- Never commit sensitive credentials to version control
+**Item Endpoints:**
+- `POST /api/items`
+
+**Image Upload:**
+- `POST /api/upload-image`
+
+**Messaging Endpoints (All):**
+- `POST /api/conversations`
+- `GET /api/conversations`
+- `GET /api/conversations/{id}`
+- `PUT /api/conversations/{id}`
+- `DELETE /api/conversations/{id}`
+- `PUT /api/conversations/{id}/mark-read`
+- `POST /api/messages`
+- `GET /api/messages`
+- `GET /api/messages/{id}`
+- `PUT /api/messages/{id}`
+- `DELETE /api/messages/{id}`
+
+**WebSocket:**
+- `WS /ws/{user_id}?token={firebase_token}` - Token passed as query parameter
+
+### Security Best Practices
+
+- ✅ **Firebase Service Account**: Credentials (`firebase_service.json`) are **NOT** in Git
+- ✅ **Sensitive Data Protection**: Each developer must add their own `firebase_service.json` file
+- ✅ **No Credential Commits**: Never commit sensitive credentials to version control
+- ✅ **Input Sanitization**: All user inputs validated and sanitized
+- ✅ **Authorization First**: Always verify user permissions before allowing access
+- ✅ **Transaction Safety**: Database operations use transactions to maintain data integrity
+- ✅ **Connection Security**: WebSocket connections authenticated to prevent unauthorized access
+
+### Recent Security Improvements
+
+A comprehensive security audit was completed with the following enhancements:
+
+1. **WebSocket Security**: Added Firebase token authentication to prevent unauthorized message interception
+2. **Authorization**: Added checks to ensure users can only access their own conversations and messages
+3. **File Upload Security**: Implemented comprehensive validation to prevent malicious file uploads
+4. **Data Integrity**: Added transaction rollback to prevent partial data writes on errors
+5. **Input Validation**: Enhanced validation for messages, prices, and user inputs
+6. **Session Management**: Fixed WebSocket database session handling to prevent connection leaks
+
+See `docs/COMPREHENSIVE_CHANGES_SUMMARY.md` for detailed information about all security improvements.
 
 ## 📚 Resources
 
@@ -513,11 +579,10 @@ The following endpoints require a valid Firebase authentication token in the `Au
 
 ### Project Documentation
 Detailed guides are available in the `docs/` folder:
-- `FASTAPI_DATABASE_IMPLEMENTATION_GUIDE.md` - How to add new features to backend
-- `DATABASE_CONCEPTS_EXPLAINED.md` - Understanding database setup
-- `INCREMENTAL_SETUP_GUIDE.md` - Step-by-step backend setup
-- `API_FUNDAMENTALS_EXPLAINED.md` - API concepts and patterns
-- `FRONTEND_BACKEND_CONNECTION.md` - Connecting frontend to backend
+- `COMPREHENSIVE_CHANGES_SUMMARY.md` - Complete summary of all security and functionality fixes
+- `WEBSOCKET_AUTHENTICATION_EXPLAINED.md` - Deep dive into WebSocket authentication security
+- `WEBSOCKET_DATABASE_SESSION_EXPLAINED.md` - Understanding database session management for WebSocket
+- `FIREBASE_AUTH_INTEGRATION.md` - Firebase authentication integration guide
 
 ## 👥 Team
 
