@@ -45,8 +45,9 @@ According to the course requirements:
 #### Backend (Python + FastAPI)
 - **FastAPI REST API**: High-performance Python web framework
 - **SQLAlchemy ORM**: Database abstraction layer
-- **SQLite Database**: Persistent data storage
-- **CORS Middleware**: Cross-origin resource sharing enabled
+- **SQLite Database**: Persistent data storage (development)
+- **PostgreSQL Database**: Production-ready cloud database support
+- **CORS Middleware**: Cross-origin resource sharing enabled (configurable)
 - **Pydantic Models**: Request/response validation
 
 #### Backend Services Implemented
@@ -201,18 +202,19 @@ bu_trift/
 │   └── app.css             # Global styles
 ├── backend/                # Backend (FastAPI + SQLAlchemy)
 │   ├── main.py             # FastAPI app & endpoints
-│   ├── database.py         # Database connection setup
+│   ├── database.py         # Database connection setup (supports SQLite & PostgreSQL)
 │   ├── auth.py             # Firebase authentication verification
-│   ├── firebase_config.py  # Firebase Admin SDK initialization
+│   ├── firebase_config.py  # Firebase Admin SDK initialization (supports file & env var)
+│   ├── start.sh            # Startup script for deployment (auto-creates database tables)
 │   ├── models/             # Database models (SQLAlchemy)
 │   │   ├── item.py         # ItemDB model
 │   │   ├── user.py         # UserDB model (with firebase_uid)
 │   │   ├── conversation.py # ConversationDB model
 │   │   └── message.py      # MessageDB model
 │   ├── uploads/            # Uploaded images (auto-generated)
-│   ├── butrift.db          # SQLite database (auto-generated)
+│   ├── butrift.db          # SQLite database (auto-generated, local dev only)
 │   ├── firebase_service.json # Firebase service account (NOT in Git - add locally)
-│   └── requirement.txt     # Python dependencies (also at root)
+│   └── requirement.txt     # Python dependencies (includes psycopg2-binary for PostgreSQL)
 ├── public/                 # Static assets
 ├── package.json            # Frontend dependencies
 ├── requirement.txt         # Python dependencies (also in backend/)
@@ -307,7 +309,11 @@ The API will be available at:
 - **API Documentation (Swagger UI)**: `http://localhost:8000/docs`
 - **Alternative API Docs (ReDoc)**: `http://localhost:8000/redoc`
 
-**Database**: The database `butrift.db` will be automatically created on first run. If you're upgrading from password-based auth, delete the old database file to recreate it with the new schema (includes `firebase_uid` column).
+**Database**: 
+- **Development**: SQLite database `butrift.db` is automatically created on first run
+- **Production**: Supports PostgreSQL (configured via `DATABASE_URL` environment variable)
+- The database automatically detects SQLite vs PostgreSQL based on the connection string
+- If upgrading from password-based auth, delete the old database file to recreate it with the new schema (includes `firebase_uid` column)
 
 #### Start Frontend Server
 
@@ -409,7 +415,18 @@ Or use a production ASGI server like Gunicorn with Uvicorn workers.
 
 ### Database
 
-The SQLite database (`backend/butrift.db`) is automatically created when you first run the backend server. All data (items, users, conversations, messages) is persisted in this file.
+The application supports **both SQLite (development) and PostgreSQL (production)** databases.
+
+**Development (Local):**
+- Uses SQLite database (`backend/butrift.db`) - automatically created on first run
+- All data (items, users, conversations, messages) is persisted in this file
+- No additional setup required
+
+**Production (Render):**
+- Uses PostgreSQL database (managed by Render)
+- Automatically detects database type from `DATABASE_URL` environment variable
+- Database tables are created automatically on startup via `start.sh` script
+- Supports production-scale traffic and concurrent connections
 
 **Database Schema**:
 - **users** table: `id`, `email`, `firebase_uid`, `display_name`, `is_verified`, `profile_image_url`, `bio`, `rating`, `total_sales`, `created_date`, `updated_date`
@@ -423,9 +440,16 @@ The SQLite database (`backend/butrift.db`) is automatically created when you fir
 - The database file is already in `.gitignore` and should not be committed
 
 **Viewing the Database:**
+
+**SQLite (Local Development):**
 - Use SQLite browser tools (DB Browser for SQLite)
 - Use Python: `import sqlite3; conn = sqlite3.connect('backend/butrift.db')`
 - Use command line: `sqlite3 backend/butrift.db`
+
+**PostgreSQL (Production):**
+- Use Render's built-in database dashboard
+- Connect via PostgreSQL client using External Database URL
+- Use tools like pgAdmin, DBeaver, or `psql` command-line client
 
 ### Next Steps
 
@@ -442,11 +466,12 @@ The SQLite database (`backend/butrift.db`) is automatically created when you fir
    - Add item recommendations
    - Rating & review system
 
-3. **Production Deployment**
-   - Set up production database (PostgreSQL)
-   - Configure environment variables
-   - Set up Firebase production environment
-   - Deploy backend and frontend
+3. **Production Deployment** ✅
+   - ✅ Set up production database (PostgreSQL) - Supported
+   - ✅ Configure environment variables - Configured
+   - ✅ Set up Firebase production environment - Configured
+   - ✅ Deploy backend and frontend - Ready for deployment
+   - See [Deployment Guide](#-deployment) section below
 
 ## 🔧 Available Scripts
 
@@ -560,6 +585,109 @@ A comprehensive security audit was completed with the following enhancements:
 
 See `docs/COMPREHENSIVE_CHANGES_SUMMARY.md` for detailed information about all security improvements.
 
+## 🚀 Deployment
+
+### Production Deployment - Render
+
+The application is **production-ready** and can be deployed to Render with full PostgreSQL and environment variable support.
+
+#### Quick Start
+
+1. **Follow the deployment guide**: See `docs/RENDER_DEPLOYMENT_GUIDE.md` for complete step-by-step instructions
+2. **Quick checklist**: See `docs/DEPLOYMENT_CHECKLIST.md` for a fast reference
+
+#### Key Deployment Features
+
+✅ **Database Support:**
+- Automatic detection: SQLite (local) or PostgreSQL (production)
+- Database tables created automatically on startup
+- Supports Render's managed PostgreSQL database
+
+✅ **Configuration:**
+- Environment variable support for all sensitive data
+- Firebase credentials via environment variable (secure)
+- Dynamic CORS configuration based on frontend URL
+- Configurable API URLs per environment
+
+✅ **Production-Ready:**
+- Startup script automates database setup
+- All security features enabled
+- Error handling and validation in place
+- Scalable architecture
+
+#### Deployment Architecture
+
+```
+┌─────────────────────────────────────────┐
+│         Render Platform                 │
+├─────────────────────────────────────────┤
+│                                         │
+│  ┌──────────────┐    ┌──────────────┐  │
+│  │   Frontend   │    │   Backend    │  │
+│  │   (Node)     │───▶│   (Python)   │  │
+│  │              │    │              │  │
+│  └──────────────┘    └──────┬───────┘  │
+│         │                    │          │
+│         │                    ▼          │
+│         │           ┌──────────────┐   │
+│         │           │  PostgreSQL  │   │
+│         │           │   Database   │   │
+│         │           └──────────────┘   │
+│         │                               │
+│         └─────────▶ Firebase Auth      │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+#### Environment Variables Required
+
+**Backend:**
+- `DATABASE_URL` - PostgreSQL connection string (from Render)
+- `FIREBASE_SERVICE_ACCOUNT` - Firebase service account JSON
+- `FRONTEND_URL` - Frontend URL for CORS configuration
+- `API_BASE_URL` - Backend URL (optional, for file URLs)
+
+**Frontend:**
+- `VITE_API_URL` - Backend API URL
+
+#### Deployment Steps Summary
+
+1. **Create PostgreSQL database** on Render
+2. **Deploy backend service:**
+   - Environment: Python 3
+   - Build: `cd backend && pip install -r requirement.txt`
+   - Start: `cd backend && ./start.sh` (or use inline command)
+   - Set environment variables
+3. **Deploy frontend service:**
+   - Environment: Node
+   - Build: `npm install && npm run build`
+   - Start: `npm start`
+   - Set `VITE_API_URL` environment variable
+4. **Configure CORS** by setting `FRONTEND_URL` in backend
+5. **Test deployment** using the testing checklist
+
+#### Important Notes
+
+⚠️ **File Uploads:**
+- Local file storage is ephemeral on Render (files lost on restart)
+- Consider migrating to cloud storage (Firebase Storage, S3) for production
+
+⚠️ **WebSocket:**
+- Free tier may have limitations with persistent WebSocket connections
+- Consider upgrading or implementing polling fallback
+
+⚠️ **Sleep Mode:**
+- Free tier services sleep after 15 minutes of inactivity
+- First request after sleep takes ~30 seconds
+- Upgrade to paid plan for always-on service
+
+#### Deployment Documentation
+
+For detailed deployment instructions, see:
+- **Complete Guide**: `docs/RENDER_DEPLOYMENT_GUIDE.md`
+- **Quick Checklist**: `docs/DEPLOYMENT_CHECKLIST.md`
+- **Database URLs**: `docs/RENDER_DATABASE_URL_EXPLAINED.md`
+
 ## 📚 Resources
 
 ### Frontend
@@ -583,6 +711,9 @@ Detailed guides are available in the `docs/` folder:
 - `WEBSOCKET_AUTHENTICATION_EXPLAINED.md` - Deep dive into WebSocket authentication security
 - `WEBSOCKET_DATABASE_SESSION_EXPLAINED.md` - Understanding database session management for WebSocket
 - `FIREBASE_AUTH_INTEGRATION.md` - Firebase authentication integration guide
+- `RENDER_DEPLOYMENT_GUIDE.md` - Complete guide for deploying to Render
+- `RENDER_DATABASE_URL_EXPLAINED.md` - Understanding Render database URLs
+- `DEPLOYMENT_CHECKLIST.md` - Quick deployment checklist
 
 ## 👥 Team
 
