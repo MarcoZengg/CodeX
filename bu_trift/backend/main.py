@@ -92,6 +92,12 @@ class UserRegister(BaseModel):
     bio: Optional[str] = None
 
 
+class UserUpdate(BaseModel):
+    display_name: Optional[str] = None
+    bio: Optional[str] = None
+    profile_image_url: Optional[str] = None
+
+
 class UserResponse(BaseModel):
     id: str
     email: str
@@ -391,6 +397,36 @@ def get_current_user(
         raise HTTPException(404, "User not found")
 
     return user_to_response(user)
+
+
+@app.put("/api/users/me", response_model=UserResponse)
+def update_current_user(
+    user_update: UserUpdate,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Update current authenticated user's profile"""
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    try:
+        if user_update.display_name is not None:
+            user.display_name = user_update.display_name
+        if user_update.bio is not None:
+            user.bio = user_update.bio
+        if user_update.profile_image_url is not None:
+            user.profile_image_url = user_update.profile_image_url
+
+        db.commit()
+        db.refresh(user)
+
+        return user_to_response(user)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update profile: {str(e)}")
 
 
 @app.get("/api/users/{user_id}", response_model=UserResponse)

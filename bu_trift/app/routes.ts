@@ -7,6 +7,8 @@ export default [
   route("sell", "routes/sell.tsx"),
   route("messages", "routes/messages.tsx"),
   route("profile", "routes/profile.tsx"),
+  route("profile/edit", "routes/profile.edit.tsx"),
+  route("about", "routes/about.tsx"),
   route("register", "routes/register.tsx"),
   route("login", "routes/login.tsx"),
 ] satisfies RouteConfig;

@@ -4,7 +4,7 @@ import { Item } from "@/entities";
 import type { Item as ItemType } from "@/entities/Item";
 import { Link } from "react-router";
 import { createPageUrl } from "@/utils";
-import { Leaf } from "lucide-react";
+import { Leaf, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 
@@ -59,6 +59,32 @@ export default function Home() {
         <FeaturedItems items={items} isLoading={isLoading} />
         <CategoryGrid />
         <CommunityStats />
+        
+        {/* About Us Highlight */}
+        <motion.div
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-3xl p-8 border border-blue-200/50"
+        >
+          <div className="flex items-start gap-6">
+            <div className="flex-shrink-0">
+              <Info className="w-8 h-8 text-indigo-600 mt-1" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-2xl font-bold text-neutral-900 mb-2">Learn About BUTrift</h3>
+              <p className="text-neutral-700 mb-6">
+                Discover our mission to create a sustainable and connected Boston University community. 
+                Meet the team, learn about our impact, and join hundreds of students making a difference.
+              </p>
+              <Link to={createPageUrl("About")}>
+                <Button className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                  Learn More About Us
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </motion.div>
         
         {/* Call to Action */}
         <motion.div

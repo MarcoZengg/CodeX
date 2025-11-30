@@ -99,6 +99,35 @@ export class UserEntity {
 
   }
 
+  /** Update current user's profile (requires Firebase token) */
+  static async update(payload: Partial<User>): Promise<User> {
+    const token = localStorage.getItem("firebaseToken");
+    if (!token) throw new Error("Not authenticated");
+
+    const body: any = {};
+    if (payload.display_name !== undefined) body.display_name = payload.display_name;
+    if (payload.bio !== undefined) body.bio = payload.bio;
+    if (payload.profile_image_url !== undefined) body.profile_image_url = payload.profile_image_url;
+
+    const response = await fetch(`${API_URL}/api/users/me`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const e = await response.json().catch(() => ({}));
+      throw new Error(e.detail || "Failed to update profile");
+    }
+
+    const user: User = await response.json();
+    localStorage.setItem("currentUser", JSON.stringify(user));
+    return user;
+  }
+
   /**
    * LOGIN:
    * 1) Firebase signInWithEmailAndPassword

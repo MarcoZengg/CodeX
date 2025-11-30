@@ -38,3 +38,8 @@ backend/firebase_service.json
 
 # Documentation files
 docs/
+# Ignore uploads and pyc
+uploads/
+__pycache__/
+*.pyc
+firebase_service.json

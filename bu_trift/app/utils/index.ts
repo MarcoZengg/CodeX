@@ -22,6 +22,7 @@ export function createPageUrl(page: string): string {
     ItemDetails: "/items",
     Messages: "/messages",
     Profile: "/profile",
+    About: "/about",
     Register: "/register",
     Login: "/login",
   };
