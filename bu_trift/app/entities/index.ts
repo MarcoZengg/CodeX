@@ -50,10 +50,15 @@ const ConversationService = {
 };
 
 const UserService = {
-  register: async (userData: UserRegister): Promise<UserType> => UserEntity.register(userData),
-  login: async (credentials: UserLogin): Promise<UserType> => UserEntity.login(credentials),
-  getById: async (userId: string): Promise<UserType> => UserEntity.getById(userId),
-  me: async (): Promise<UserType> => UserEntity.me(),
+  register: async (userData: UserRegister): Promise<UserType | null> =>
+    UserEntity.register(userData),
+  login: async (credentials: UserLogin): Promise<UserType | null> =>
+    UserEntity.login(credentials),
+  getById: async (userId: string): Promise<UserType | null> =>
+    UserEntity.getById(userId),
+  me: async (): Promise<UserType | null> => UserEntity.me(),
+  update: async (payload: Partial<UserType>): Promise<UserType | null> =>
+    UserEntity.update(payload as any),
 };
 
 // Export runtime objects as values (this is a value export, not a type)

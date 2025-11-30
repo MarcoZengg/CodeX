@@ -237,10 +237,12 @@ export default function Profile() {
                       </div>
                     </div>
                     
-                    <Button variant="outline" className="flex items-center gap-2">
-                      <Edit3 className="w-4 h-4" />
-                      Edit Profile
-                    </Button>
+                    <Link to="/profile/edit">
+                      <Button variant="outline" className="flex items-center gap-2">
+                        <Edit3 className="w-4 h-4" />
+                        Edit Profile
+                      </Button>
+                    </Link>
                   </div>
                 </div>
               </div>
