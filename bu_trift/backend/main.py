@@ -41,8 +41,12 @@ origins = [
     "http://localhost:5173",
     "http://localhost:5174",
     "http://localhost:5175",
-    frontend_url,  # Production frontend URL from environment
+    frontend_url,  # Production frontend URL from environment variable
+    # Common Render frontend URLs (will be overridden by FRONTEND_URL if set)
+    "https://butrift-frontend.onrender.com",
 ]
+# Remove duplicates while preserving order
+origins = list(dict.fromkeys(origins))
 
 app.add_middleware(
     CORSMiddleware,
