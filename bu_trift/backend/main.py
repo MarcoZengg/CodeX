@@ -35,10 +35,13 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 # Create tables
 Base.metadata.create_all(bind=engine)
 
+# CORS configuration - support both local and production
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
 origins = [
     "http://localhost:5173",
     "http://localhost:5174",
     "http://localhost:5175",
+    frontend_url,  # Production frontend URL from environment
 ]
 
 app.add_middleware(
