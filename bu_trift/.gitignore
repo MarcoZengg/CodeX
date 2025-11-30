@@ -35,3 +35,6 @@ env/
 firebase_service.json
 **/firebase_service.json
 backend/firebase_service.json
+
+# Documentation files
+docs/
