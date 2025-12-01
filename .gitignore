@@ -5,3 +5,6 @@ bu_trift/backend/uploads/
 bu_trift/backend/__pycache__/
 bu_trift/backend/**/*.pyc
 bu_trift/backend/firebase_service.json
+
+# Documentation files
+docs/
