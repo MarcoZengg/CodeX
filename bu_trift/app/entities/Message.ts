@@ -1,5 +1,6 @@
 // Import API URL from config
 import { API_URL } from "../config";
+import { getFirebaseToken, fetchWithAuth } from "../utils/auth";
 
 export interface Message {
   id: string;
@@ -33,8 +34,8 @@ export interface MessageCreate {
 }
 
 // Helper function to get auth headers
-function getAuthHeaders(includeJSON: boolean = true): HeadersInit {
-  const token = localStorage.getItem("firebaseToken");
+async function getAuthHeaders(includeJSON: boolean = true): Promise<HeadersInit> {
+  const token = await getFirebaseToken(false);
   const headers: HeadersInit = {};
 
   if (includeJSON) headers["Content-Type"] = "application/json";
@@ -50,9 +51,10 @@ export class MessageEntity {
    */
   static async createConversation(data: ConversationCreate): Promise<Conversation> {
     try {
-      const response = await fetch(`${API_URL}/api/conversations`, {
+      const headers = await getAuthHeaders();
+      const response = await fetchWithAuth(`${API_URL}/api/conversations`, {
         method: "POST",
-        headers: getAuthHeaders(),
+        headers,
         body: JSON.stringify(data),
       });
 
@@ -73,9 +75,10 @@ export class MessageEntity {
    */
   static async getConversations(userId: string): Promise<Conversation[]> {
     try {
-      const response = await fetch(`${API_URL}/api/conversations?user_id=${userId}`, {
+      const headers = await getAuthHeaders();
+      const response = await fetchWithAuth(`${API_URL}/api/conversations?user_id=${userId}`, {
         method: "GET",
-        headers: getAuthHeaders(),
+        headers,
       });
 
       if (!response.ok) {
@@ -94,9 +97,10 @@ export class MessageEntity {
    */
   static async getMessages(conversationId: string): Promise<Message[]> {
     try {
-      const response = await fetch(`${API_URL}/api/messages?conversation_id=${conversationId}`, {
+      const headers = await getAuthHeaders();
+      const response = await fetchWithAuth(`${API_URL}/api/messages?conversation_id=${conversationId}`, {
         method: "GET",
-        headers: getAuthHeaders(),
+        headers,
       });
 
       if (!response.ok) {
@@ -115,9 +119,10 @@ export class MessageEntity {
    */
   static async sendMessage(data: MessageCreate): Promise<Message> {
     try {
-      const response = await fetch(`${API_URL}/api/messages`, {
+      const headers = await getAuthHeaders();
+      const response = await fetchWithAuth(`${API_URL}/api/messages`, {
         method: "POST",
-        headers: getAuthHeaders(),
+        headers,
         body: JSON.stringify(data),
       });
 
@@ -138,9 +143,10 @@ export class MessageEntity {
    */
   static async markAsRead(conversationId: string, userId: string): Promise<void> {
     try {
-      const response = await fetch(`${API_URL}/api/conversations/${conversationId}/mark-read?user_id=${userId}`, {
+      const headers = await getAuthHeaders();
+      const response = await fetchWithAuth(`${API_URL}/api/conversations/${conversationId}/mark-read?user_id=${userId}`, {
         method: "PUT",
-        headers: getAuthHeaders(),
+        headers,
       });
 
       if (!response.ok) {

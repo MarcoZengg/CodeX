@@ -15,6 +15,7 @@ import { motion } from "framer-motion";
 import type { ItemCategory, ItemCondition, Item as ItemType } from "@/entities/Item";
 import { ItemEntity } from "@/entities/Item";
 import { API_URL } from "../config";
+import { getFirebaseToken } from "../utils/auth";
 
 const categories: { value: ItemCategory | ""; label: string }[] = [
   { value: "textbooks", label: "Textbooks" },
@@ -65,12 +66,15 @@ export default function Sell() {
 
   // Load Firebase token & redirect if missing
   useEffect(() => {
-    const token = localStorage.getItem("firebaseToken");
-    if (!token) {
-      navigate(createPageUrl("Login"));
-      return;
-    }
-    setFirebaseToken(token);
+    const checkAuth = async () => {
+      const token = await getFirebaseToken(false);
+      if (!token) {
+        navigate(createPageUrl("Login"));
+        return;
+      }
+      setFirebaseToken(token);
+    };
+    checkAuth();
   }, [navigate]);
 
   const [formData, setFormData] = useState<FormData>({
@@ -93,21 +97,42 @@ export default function Sell() {
 
   // Image upload with Firebase token authentication
   const handleFileUpload = async (files: FileList | null) => {
-    if (!files || !firebaseToken) return;
+    if (!files) return;
 
     setUploadingImages(true);
     const uploadedURLs: string[] = [];
 
     try {
+      // Get fresh token for each upload
+      let token = await getFirebaseToken(false);
+      if (!token) {
+        navigate(createPageUrl("Login"));
+        return;
+      }
+
       for (const file of Array.from(files)) {
         const data = new FormData();
         data.append("file", file);
 
-        const res = await fetch(`${API_URL}/api/upload-image`, {
+        // Try upload with current token
+        let res = await fetch(`${API_URL}/api/upload-image`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${firebaseToken}` },
+          headers: { Authorization: `Bearer ${token}` },
           body: data,
         });
+
+        // If 401, refresh token and retry
+        if (res.status === 401) {
+          token = await getFirebaseToken(true); // Force refresh
+          if (!token) {
+            throw new Error("Authentication failed. Please login again.");
+          }
+          res = await fetch(`${API_URL}/api/upload-image`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: data,
+          });
+        }
 
         if (!res.ok) throw new Error("Image upload failed");
 
@@ -150,7 +175,9 @@ export default function Sell() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
-    if (!firebaseToken) {
+    // Get fresh token
+    const token = await getFirebaseToken(false);
+    if (!token) {
       navigate(createPageUrl("Login"));
       return;
     }

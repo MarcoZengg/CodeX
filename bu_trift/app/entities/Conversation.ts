@@ -1,5 +1,6 @@
 // Import API URL from config
 import { API_URL } from "../config";
+import { getFirebaseToken, fetchWithAuth } from "../utils/auth";
 
 // Updated interface to match backend response
 export interface Conversation {
@@ -18,8 +19,8 @@ export interface Conversation {
 }
 
 // Helper function to get auth headers
-function getAuthHeaders(includeJSON: boolean = true): HeadersInit {
-  const token = localStorage.getItem("firebaseToken");
+async function getAuthHeaders(includeJSON: boolean = true): Promise<HeadersInit> {
+  const token = await getFirebaseToken(false);
   const headers: HeadersInit = {};
 
   if (includeJSON) headers["Content-Type"] = "application/json";
@@ -49,9 +50,10 @@ export class ConversationEntity {
         throw new Error("Missing participant IDs");
       }
 
-      const response = await fetch(`${API_URL}/api/conversations`, {
+      const headers = await getAuthHeaders();
+      const response = await fetchWithAuth(`${API_URL}/api/conversations`, {
         method: "POST",
-        headers: getAuthHeaders(),
+        headers,
         body: JSON.stringify({
           participant1_id,
           participant2_id,
@@ -87,9 +89,10 @@ export class ConversationEntity {
       // For getting conversations for a user
       if (filters.participant_ids?.value) {
         const userId = filters.participant_ids.value;
-        const response = await fetch(`${API_URL}/api/conversations?user_id=${userId}`, {
+        const headers = await getAuthHeaders();
+        const response = await fetchWithAuth(`${API_URL}/api/conversations?user_id=${userId}`, {
           method: "GET",
-          headers: getAuthHeaders(),
+          headers,
         });
 
         if (!response.ok) {

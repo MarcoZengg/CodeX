@@ -4,6 +4,7 @@ import { Home, Search, Plus, User, MessageCircle, LogIn, UserPlus, LogOut } from
 import { useState, useEffect } from "react";
 import type { User as UserType } from "@/entities/User";
 import { Button } from "@/components/ui/button";
+import { setupTokenRefresh } from "@/utils/auth";
 
 const navigationItems = [
   {
@@ -40,6 +41,12 @@ interface LayoutProps {
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const [currentUser, setCurrentUser] = useState<UserType | null>(null);
+
+  // Set up Firebase token refresh on mount
+  useEffect(() => {
+    const cleanup = setupTokenRefresh();
+    return cleanup; // Cleanup on unmount
+  }, []);
 
   // Load user from localStorage on mount
   useEffect(() => {
@@ -78,7 +85,10 @@ export default function Layout({ children }: LayoutProps) {
     };
   }, [location]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Import UserEntity dynamically to avoid circular dependency
+    const { UserEntity } = await import("@/entities/User");
+    await UserEntity.logout();
     localStorage.removeItem("currentUser");
     setCurrentUser(null);
     // Redirect to home page

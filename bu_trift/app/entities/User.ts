@@ -8,6 +8,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
+import { getFirebaseToken, fetchWithAuth } from "../utils/auth";
 
 export interface User {
   id?: string;
@@ -41,8 +42,8 @@ export interface UserProfileCreate {
 }
 
 /* AUTH HEADERS*/
-function getAuthHeaders(includeJSON: boolean = true): HeadersInit {
-  const token = localStorage.getItem("firebaseToken");
+async function getAuthHeaders(includeJSON: boolean = true): Promise<HeadersInit> {
+  const token = await getFirebaseToken(false);
   const headers: HeadersInit = {};
 
   if (includeJSON) headers["Content-Type"] = "application/json";
@@ -68,7 +69,7 @@ export class UserEntity {
     );
 
     // 2 — Get Firebase ID token
-    const idToken = await cred.user.getIdToken();
+    const idToken = await cred.user.getIdToken(true); // Force refresh on login
     localStorage.setItem("firebaseToken", idToken);
 
     // 3 — Create profile in backend
@@ -101,7 +102,7 @@ export class UserEntity {
 
   /** Update current user's profile (requires Firebase token) */
   static async update(payload: Partial<User>): Promise<User> {
-    const token = localStorage.getItem("firebaseToken");
+    const token = await getFirebaseToken(false);
     if (!token) throw new Error("Not authenticated");
 
     const body: any = {};
@@ -109,11 +110,10 @@ export class UserEntity {
     if (payload.bio !== undefined) body.bio = payload.bio;
     if (payload.profile_image_url !== undefined) body.profile_image_url = payload.profile_image_url;
 
-    const response = await fetch(`${API_URL}/api/users/me`, {
+    const response = await fetchWithAuth(`${API_URL}/api/users/me`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(body),
     });
@@ -143,7 +143,7 @@ export class UserEntity {
     );
 
     // 2 — ID token
-    const idToken = await cred.user.getIdToken();
+    const idToken = await cred.user.getIdToken(true); // Force refresh on login
     localStorage.setItem("firebaseToken", idToken);
 
     // 3 — load profile from backend
@@ -167,14 +167,11 @@ export class UserEntity {
 
   /** Load current user from backend (requires token) */
   static async me(): Promise<User | null> {
-    const token = localStorage.getItem("firebaseToken");
+    const token = await getFirebaseToken(false);
     if (!token) return null;
 
-    const response = await fetch(`${API_URL}/api/users/me`, {
+    const response = await fetchWithAuth(`${API_URL}/api/users/me`, {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
     });
 
     if (!response.ok) return null;
@@ -185,9 +182,10 @@ export class UserEntity {
    * Get user by ID (public profile)
    */
   static async getById(userId: string): Promise<User> {
-    const response = await fetch(`${API_URL}/api/users/${userId}`, {
+    const headers = await getAuthHeaders(false); // no JSON needed
+    const response = await fetchWithAuth(`${API_URL}/api/users/${userId}`, {
       method: "GET",
-      headers: getAuthHeaders(false), // no JSON needed
+      headers,
     });
 
     if (!response.ok) {
