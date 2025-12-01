@@ -5,3 +5,5 @@ pydantic
 bcrypt
 firebase-admin
 psycopg2-binary
+cloudinary
+python-dotenv

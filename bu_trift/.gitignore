@@ -43,3 +43,5 @@ uploads/
 __pycache__/
 *.pyc
 firebase_service.json
+
+backend/.env

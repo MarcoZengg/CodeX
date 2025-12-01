@@ -21,6 +21,9 @@ from auth import verify_token
 # Ensure firebase_admin initializes
 import firebase_config  # noqa: F401
 
+# Import Cloudinary storage helper
+from storage import upload_file_to_cloudinary
+
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
@@ -216,6 +219,10 @@ async def upload_image(
     file: UploadFile = File(...),
     token_data: dict = Depends(verify_token),
 ):
+    """
+    Upload an image file to Cloudinary.
+    Returns the public URL of the uploaded file.
+    """
     # Validate file type
     allowed_extensions = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
     file_ext = os.path.splitext(file.filename)[1].lower()
@@ -242,20 +249,28 @@ async def upload_image(
     safe_filename = f"{int(time.time())}_{safe_filename}"
     
     # Ensure filename doesn't exceed reasonable length
+    # Cloudinary allows up to 255 characters for public_id
     if len(safe_filename) > 255:
         name, ext = os.path.splitext(safe_filename)
         safe_filename = name[:250] + ext
     
-    file_path = os.path.join("uploads", safe_filename)
-    
-    # Write file
-    with open(file_path, "wb") as f:
-        f.write(content)
-    
-    # Use environment variable for base URL if available, otherwise localhost
-    base_url = os.getenv("API_BASE_URL", "http://localhost:8000")
-    url = f"{base_url}/uploads/{safe_filename}"
-    return {"url": url}
+    try:
+        # Upload to Cloudinary (synchronous function, no await needed)
+        public_url = upload_file_to_cloudinary(
+            file_content=content,
+            filename=safe_filename,
+            folder="butrift/uploads"
+        )
+        
+        logger.info(f"Image uploaded successfully to Cloudinary: {safe_filename}")
+        return {"url": public_url}
+        
+    except Exception as e:
+        logger.error(f"Failed to upload image to Cloudinary: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload image: {str(e)}"
+        )
 
 
 # ============================
