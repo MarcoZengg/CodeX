@@ -29,6 +29,9 @@ const ItemService = {
   ): Promise<ItemType[]> => ItemEntity.filter(filters, sortBy, limit),
   get: async (id: string): Promise<ItemType> => ItemEntity.get(id),
   create: async (data: Partial<ItemType>): Promise<ItemType> => ItemEntity.create(data),
+  delete: async (id: string): Promise<void> => ItemEntity.delete(id),
+  updateStatus: async (id: string, status: ItemStatus): Promise<ItemType> =>
+    ItemEntity.updateStatus(id, status),
 };
 
 const MessageService = {
@@ -67,4 +70,3 @@ export { ItemService as Item };
 export { MessageService as Message };
 export { ConversationService as Conversation };
 export { UserService as User };
-

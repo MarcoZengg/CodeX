@@ -249,4 +249,53 @@ export class ItemEntity {
       throw error;
     }
   }
+
+  /* =============================
+     DELETE ITEM (Firebase-protected)
+     ============================= */
+  static async delete(id: string): Promise<void> {
+    try {
+      const token = localStorage.getItem("firebaseToken");
+      if (!token) throw new Error("You must be logged in to delete an item.");
+
+      const response = await fetch(`${API_URL}/api/items/${id}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(false),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to delete item");
+      }
+    } catch (error) {
+      console.error("Error deleting item:", error);
+      throw error;
+    }
+  }
+
+  /* =============================
+     UPDATE ITEM STATUS (Firebase-protected)
+     ============================= */
+  static async updateStatus(id: string, status: ItemStatus): Promise<Item> {
+    try {
+      const token = localStorage.getItem("firebaseToken");
+      if (!token) throw new Error("You must be logged in to update an item.");
+
+      const response = await fetch(`${API_URL}/api/items/${id}/status`, {
+        method: "PUT",
+        headers: getAuthHeaders(true),
+        body: JSON.stringify({ status }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to update item status");
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error updating item status:", error);
+      throw error;
+    }
+  }
 }

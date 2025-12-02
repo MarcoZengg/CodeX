@@ -15,9 +15,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 interface ItemGridProps {
   items: ItemType[];
+  onDelete?: (id: string) => void;
+  onMarkSold?: (id: string) => void;
+  deletingId?: string | null;
+  updatingId?: string | null;
 }
 
-function ItemGrid({ items }: ItemGridProps) {
+function ItemGrid({ items, onDelete, onMarkSold, deletingId, updatingId }: ItemGridProps) {
   if (items.length === 0) {
     return (
       <div className="text-center py-12">
@@ -35,38 +39,71 @@ function ItemGrid({ items }: ItemGridProps) {
 
   return (
     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {items.map((item) => (
-        <Link key={item.id} to={`/items/${item.id}`}>
-          <Card className="overflow-hidden hover:shadow-lg transition-shadow duration-300 border-neutral-200/60">
-            <div className="aspect-square bg-neutral-100 relative overflow-hidden">
-              {item.images?.[0] ? (
-                <img
-                  src={item.images[0]}
-                  alt={item.title}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <Package className="w-12 h-12 text-neutral-400" />
+      {items.map((item) => {
+        if (!item.id) return null; // Guard against undefined ids
+        return (
+          <Card key={item.id} className="overflow-hidden hover:shadow-lg transition-shadow duration-300 border-neutral-200/60">
+            <Link to={`/items/${item.id}`} className="block">
+              <div className="aspect-square bg-neutral-100 relative overflow-hidden">
+                {item.images?.[0] ? (
+                  <img
+                    src={item.images[0]}
+                    alt={item.title}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Package className="w-12 h-12 text-neutral-400" />
+                  </div>
+                )}
+                <div className="absolute top-3 right-3">
+                  <Badge variant={item.status === "available" ? "default" : "secondary"}>
+                    {item.status}
+                  </Badge>
                 </div>
-              )}
-              <div className="absolute top-3 right-3">
-                <Badge variant={item.status === "available" ? "default" : "secondary"}>
-                  {item.status}
-                </Badge>
               </div>
-            </div>
-            <CardContent className="p-4">
-              <h3 className="font-semibold text-neutral-900 mb-2 line-clamp-1">
-                {item.title}
-              </h3>
-              <p className="text-xl font-bold text-red-600">
-                ${item.price}
-              </p>
-            </CardContent>
+              <CardContent className="p-4">
+                <h3 className="font-semibold text-neutral-900 mb-2 line-clamp-1">
+                  {item.title}
+                </h3>
+                <p className="text-xl font-bold text-red-600">
+                  ${item.price}
+                </p>
+              </CardContent>
+            </Link>
+            {onDelete && (
+              <div className="px-4 pb-4 space-y-2">
+                {onMarkSold && item.status === "available" && (
+                  <Button
+                    variant="secondary"
+                    className="w-full"
+                    disabled={updatingId === item.id}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onMarkSold(item.id);
+                    }}
+                  >
+                    {updatingId === item.id ? "Marking..." : "Mark as sold"}
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  className="w-full border-red-200 text-red-700 hover:bg-red-50"
+                  disabled={deletingId === item.id}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onDelete(item.id);
+                  }}
+                >
+                  {deletingId === item.id ? "Removing..." : "Remove listing"}
+                </Button>
+              </div>
+            )}
           </Card>
-        </Link>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -84,6 +121,10 @@ export default function Profile() {
   const [userItems, setUserItems] = useState<ItemType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   useEffect(() => {
     loadUserData();
@@ -118,6 +159,42 @@ export default function Profile() {
       setIsLoggedIn(false);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDeleteItem = async (itemId: string) => {
+    const confirmed = window.confirm("Remove this listing? Buyers will no longer see it.");
+    if (!confirmed) return;
+
+    setDeleteError(null);
+    setDeletingId(itemId);
+    try {
+      await Item.delete(itemId);
+      setUserItems((prev) => prev.filter((item) => item.id !== itemId));
+    } catch (error) {
+      console.error("Error deleting item:", error);
+      setDeleteError(error instanceof Error ? error.message : "Failed to remove listing");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleMarkSold = async (itemId: string) => {
+    const confirmed = window.confirm("Mark this listing as sold?");
+    if (!confirmed) return;
+
+    setUpdateError(null);
+    setUpdatingId(itemId);
+    try {
+      const updated = await Item.updateStatus(itemId, "sold");
+      setUserItems((prev) =>
+        prev.map((item) => (item.id === itemId ? { ...item, status: updated.status } : item))
+      );
+    } catch (error) {
+      console.error("Error updating item status:", error);
+      setUpdateError(error instanceof Error ? error.message : "Failed to update listing status");
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -289,9 +366,26 @@ export default function Profile() {
               <TabsTrigger value="sold">Sold ({userItems.filter(item => item.status === "sold").length})</TabsTrigger>
               <TabsTrigger value="all">All ({userItems.length})</TabsTrigger>
             </TabsList>
+
+            {deleteError && (
+              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                {deleteError}
+              </div>
+            )}
+            {updateError && (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                {updateError}
+              </div>
+            )}
             
             <TabsContent value="active" className="mt-6">
-              <ItemGrid items={userItems.filter(item => item.status === "available")} />
+              <ItemGrid
+                items={userItems.filter(item => item.status === "available")}
+                onDelete={handleDeleteItem}
+                onMarkSold={handleMarkSold}
+                deletingId={deletingId}
+                updatingId={updatingId}
+              />
             </TabsContent>
             
             <TabsContent value="sold" className="mt-6">
@@ -299,7 +393,13 @@ export default function Profile() {
             </TabsContent>
             
             <TabsContent value="all" className="mt-6">
-              <ItemGrid items={userItems} />
+              <ItemGrid
+                items={userItems}
+                onDelete={handleDeleteItem}
+                onMarkSold={handleMarkSold}
+                deletingId={deletingId}
+                updatingId={updatingId}
+              />
             </TabsContent>
           </Tabs>
         </motion.div>
@@ -307,4 +407,3 @@ export default function Profile() {
     </div>
   );
 }
-

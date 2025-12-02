@@ -19,6 +19,9 @@ export interface Conversation {
   last_message_at?: string;
   created_date: string;
   updated_date: string;
+  item_title?: string;
+  last_message_snippet?: string | null;
+  unread_count?: number;
 }
 
 export interface ConversationCreate {

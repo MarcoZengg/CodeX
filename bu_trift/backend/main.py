@@ -14,6 +14,7 @@ import uuid
 from datetime import datetime
 import os
 import logging
+from sqlalchemy.exc import SQLAlchemyError
 
 # NEW: import Firebase auth verification
 from auth import verify_token
@@ -22,7 +23,7 @@ from auth import verify_token
 import firebase_config  # noqa: F401
 
 # Import Cloudinary storage helper
-from storage import upload_file_to_cloudinary
+from storage import upload_file
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,10 @@ class ItemResponse(BaseModel):
     images: Optional[List[str]]
 
 
+class ItemStatusUpdate(BaseModel):
+    status: str
+
+
 class UserRegister(BaseModel):
     email: str
     display_name: str
@@ -127,6 +132,8 @@ class ConversationResponse(BaseModel):
     last_message_at: Optional[str]
     created_date: str
     updated_date: str
+    last_message_snippet: Optional[str] = None
+    unread_count: int = 0
 
 # Message Pydantic models
 class MessageCreate(BaseModel):
@@ -181,8 +188,35 @@ def user_to_response(user: UserDB) -> dict:
     }
 
 
-def conversation_to_response(conversation: ConversationDB) -> dict:
-    """Convert ConversationDB to response dictionary"""
+def conversation_to_response(
+    conversation: ConversationDB,
+    current_user_id: str | None = None,
+    db: Session | None = None,
+) -> dict:
+    """Convert ConversationDB to response dictionary with optional unread and last message snippet."""
+    last_message_snippet = None
+    unread_count = 0
+
+    if db and current_user_id:
+        last_message = (
+            db.query(MessageDB)
+            .filter(MessageDB.conversation_id == conversation.id)
+            .order_by(MessageDB.created_date.desc())
+            .first()
+        )
+        if last_message:
+            last_message_snippet = (last_message.content or "")[:120]
+
+        unread_count = (
+            db.query(MessageDB)
+            .filter(
+                MessageDB.conversation_id == conversation.id,
+                MessageDB.sender_id != current_user_id,
+                MessageDB.is_read == False,  # noqa: E712
+            )
+            .count()
+        )
+
     return {
         "id": conversation.id,
         "participant1_id": conversation.participant1_id,
@@ -191,6 +225,8 @@ def conversation_to_response(conversation: ConversationDB) -> dict:
         "last_message_at": conversation.last_message_at.isoformat() if conversation.last_message_at else None,
         "created_date": conversation.created_date.isoformat() if conversation.created_date else datetime.now().isoformat(),
         "updated_date": conversation.updated_date.isoformat() if conversation.updated_date else datetime.now().isoformat(),
+        "last_message_snippet": last_message_snippet,
+        "unread_count": unread_count,
     }
 
 
@@ -256,7 +292,7 @@ async def upload_image(
     
     try:
         # Upload to Cloudinary (synchronous function, no await needed)
-        public_url = upload_file_to_cloudinary(
+        public_url = upload_file(
             file_content=content,
             filename=safe_filename,
             folder="butrift/uploads"
@@ -352,6 +388,73 @@ def create_item(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create item: {str(e)}")
+
+
+@app.put("/api/items/{item_id}/status", response_model=ItemResponse)
+def update_item_status(
+    item_id: str,
+    status_update: ItemStatusUpdate,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Update item status (available/sold/reserved). Only the seller can update."""
+    allowed_statuses = {"available", "sold", "reserved"}
+    if status_update.status not in allowed_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status. Allowed: {', '.join(sorted(allowed_statuses))}"
+        )
+
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    item = db.query(ItemDB).filter(ItemDB.id == item_id).first()
+    if not item:
+        raise HTTPException(404, "Item not found")
+
+    if item.seller_id != user.id:
+        raise HTTPException(status_code=403, detail="You can only update your own listings")
+
+    try:
+        item.status = status_update.status
+        db.commit()
+        db.refresh(item)
+        return item_to_response(item)
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update item: {str(e)}")
+
+
+@app.delete("/api/items/{item_id}")
+def delete_item(
+    item_id: str,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """
+    Delete an item listing. Only the seller who created the item can delete it.
+    """
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    item = db.query(ItemDB).filter(ItemDB.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    if item.seller_id != user.id:
+        raise HTTPException(status_code=403, detail="You can only remove your own listings")
+
+    try:
+        db.delete(item)
+        db.commit()
+        return {"message": "Item deleted successfully"}
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete item: {str(e)}")
 
 
 # ============================
@@ -595,7 +698,7 @@ def create_conversation(
     
     if existing:
         # Return existing conversation instead of creating duplicate
-        return conversation_to_response(existing)
+        return conversation_to_response(existing, current_user_id=current_user.id, db=db)
     
     try:
         # Create new conversation
@@ -636,7 +739,7 @@ def get_conversations(
         (ConversationDB.participant2_id == user_id)
     ).order_by(ConversationDB.last_message_at.desc().nullslast()).all()
     
-    return [conversation_to_response(conv) for conv in conversations]
+    return [conversation_to_response(conv, current_user_id=user_id, db=db) for conv in conversations]
 
 @app.get("/api/conversations/{conversation_id}", response_model=ConversationResponse)
 def get_conversation(
@@ -658,7 +761,7 @@ def get_conversation(
     if current_user.id not in [conversation.participant1_id, conversation.participant2_id]:
         raise HTTPException(status_code=403, detail="You are not a participant in this conversation")
     
-    return conversation_to_response(conversation)
+    return conversation_to_response(conversation, current_user_id=current_user.id, db=db)
 
 @app.put("/api/conversations/{conversation_id}", response_model=ConversationResponse)
 def update_conversation(
@@ -687,7 +790,7 @@ def update_conversation(
         
         db.commit()
         db.refresh(conversation)
-        return conversation_to_response(conversation)
+        return conversation_to_response(conversation, current_user_id=current_user.id, db=db)
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update conversation: {str(e)}")

@@ -21,6 +21,7 @@ export default function Messages() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [participantUsers, setParticipantUsers] = useState<Record<string, UserType>>({});
+  const [unreadTotal, setUnreadTotal] = useState<number>(0);
 
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -83,6 +84,12 @@ export default function Messages() {
                 participant_ids: [conv.participant1_id, conv.participant2_id],
               }));
               setConversations(formattedConversations);
+              setUnreadTotal(
+                formattedConversations.reduce(
+                  (sum, conv) => sum + (conv.unread_count ?? 0),
+                  0
+                )
+              );
 
               // Fetch user data for all other participants
               const otherParticipantIds = new Set<string>();
@@ -127,14 +134,26 @@ export default function Messages() {
                   setConversations((prevConvs) => {
                     return prevConvs.map((conv) => {
                       if (conv.id === newMsg.conversation_id) {
+                        const isFromOther = newMsg.sender_id !== currentUser?.id;
                         return {
                           ...conv,
                           last_message_at: newMsg.created_date,
-                          last_message_snippet: newMsg.content.substring(0, 50),
+                          last_message_snippet: newMsg.content.substring(0, 80),
+                          unread_count:
+                            isFromOther && selectedIdRef.current !== conv.id
+                              ? (conv.unread_count || 0) + 1
+                              : conv.unread_count || 0,
                         };
                       }
                       return conv;
                     });
+                  });
+                  // Update unread total
+                  setUnreadTotal((prev) => {
+                    const isFromOther = newMsg.sender_id !== currentUser?.id;
+                    return isFromOther && selectedIdRef.current !== newMsg.conversation_id
+                      ? prev + 1
+                      : prev;
                   });
                   
                   // Only add message if it's for the currently selected conversation
@@ -205,6 +224,15 @@ export default function Messages() {
         // Mark conversation as read
         if (currentUser?.id) {
           await MessageEntity.markAsRead(selectedId, currentUser.id);
+          // Reset unread counter locally
+          setConversations((prev) =>
+            prev.map((conv) =>
+              conv.id === selectedId ? { ...conv, unread_count: 0 } : conv
+            )
+          );
+          const target = conversations.find((c) => c.id === selectedId);
+          const decrement = target?.unread_count ?? 0;
+          setUnreadTotal((prev) => Math.max(0, prev - decrement));
         }
       } catch (error) {
         console.error("Error loading messages:", error);
@@ -280,18 +308,34 @@ export default function Messages() {
     >
       {/* Left: conversation list */}
       <div
-        style={{
-          borderRight: "1px solid #e5e5e5",
-          paddingRight: 16,
-          overflowY: "auto",
-        }}
-      >
-        <h2 style={{ fontWeight: 700, marginBottom: 16 }}>Inbox</h2>
-        {conversations.length === 0 && (
-          <div style={{ color: "#666", fontSize: 14 }}>
-            No conversations yet.
-          </div>
+      style={{
+        borderRight: "1px solid #e5e5e5",
+        paddingRight: 16,
+        overflowY: "auto",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+        <h2 style={{ fontWeight: 700 }}>Inbox</h2>
+        {unreadTotal > 0 && (
+          <span
+            style={{
+              backgroundColor: "#dc2626",
+              color: "#fff",
+              borderRadius: 999,
+              padding: "2px 10px",
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
+            {unreadTotal} new
+          </span>
         )}
+      </div>
+      {conversations.length === 0 && (
+        <div style={{ color: "#666", fontSize: 14 }}>
+          No conversations yet.
+        </div>
+      )}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {conversations.map((c) => {
             const otherId =
@@ -301,6 +345,7 @@ export default function Messages() {
             const otherUser = otherId ? participantUsers[otherId] : null;
             const name = otherUser?.display_name || (otherId ? `User ${otherId.substring(0, 8)}` : "Unknown User");
             const isSelected = c.id === selectedId;
+            const unread = c.unread_count ?? 0;
 
             // Simple mock status based on isCompleted/hasLeftReview – per conversation
             // For now, we only show status for the selected conversation
@@ -326,16 +371,62 @@ export default function Messages() {
                   border: "1px solid #eee",
                   backgroundColor: isSelected ? "#fee2e2" : "#fff",
                   cursor: "pointer",
+                  position: "relative",
                 }}
               >
+                {unread > 0 && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: 8,
+                      right: 8,
+                      backgroundColor: "#dc2626",
+                      color: "#fff",
+                      borderRadius: 999,
+                      padding: "2px 8px",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      minWidth: 20,
+                      textAlign: "center",
+                    }}
+                  >
+                    {unread}
+                  </div>
+                )}
                 <div
                   style={{
-                    fontWeight: 600,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
                     marginBottom: 4,
-                    fontSize: 14,
                   }}
                 >
-                  {name}
+                  <div
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: "50%",
+                      backgroundColor: "#fee2e2",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      overflow: "hidden",
+                      border: "1px solid #fecdd3",
+                    }}
+                  >
+                    {otherUser?.profile_image_url ? (
+                      <img
+                        src={otherUser.profile_image_url}
+                        alt={name}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      />
+                    ) : (
+                      <span style={{ fontWeight: 700, color: "#b91c1c" }}>
+                        {name.charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{name}</div>
                 </div>
                 <div
                   style={{
