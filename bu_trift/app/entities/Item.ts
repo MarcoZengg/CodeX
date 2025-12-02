@@ -1,5 +1,6 @@
 // Import API URL from config
 import { API_URL } from "../config";
+import { fetchWithAuth, getFirebaseToken } from "../utils/auth";
 
 export type ItemCategory =
   | "textbooks"
@@ -255,12 +256,12 @@ export class ItemEntity {
      ============================= */
   static async delete(id: string): Promise<void> {
     try {
-      const token = localStorage.getItem("firebaseToken");
+      const token = await getFirebaseToken(false);
       if (!token) throw new Error("You must be logged in to delete an item.");
 
-      const response = await fetch(`${API_URL}/api/items/${id}`, {
+      const response = await fetchWithAuth(`${API_URL}/api/items/${id}`, {
         method: "DELETE",
-        headers: getAuthHeaders(false),
+        headers: {},
       });
 
       if (!response.ok) {
@@ -278,12 +279,14 @@ export class ItemEntity {
      ============================= */
   static async updateStatus(id: string, status: ItemStatus): Promise<Item> {
     try {
-      const token = localStorage.getItem("firebaseToken");
+      const token = await getFirebaseToken(false);
       if (!token) throw new Error("You must be logged in to update an item.");
 
-      const response = await fetch(`${API_URL}/api/items/${id}/status`, {
+      const response = await fetchWithAuth(`${API_URL}/api/items/${id}/status`, {
         method: "PUT",
-        headers: getAuthHeaders(true),
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ status }),
       });
 

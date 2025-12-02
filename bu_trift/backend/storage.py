@@ -7,18 +7,11 @@ import cloudinary.uploader
 import logging
 import os
 from dotenv import load_dotenv
-from pathlib import Path
 
 # Load environment variables from .env file
 load_dotenv()
 
 logger = logging.getLogger(__name__)
-
-CLOUDINARY_CONFIGURED = False
-
-# Local uploads base dir (matches StaticFiles mount in main.py)
-UPLOADS_ROOT = Path(__file__).resolve().parent / "uploads"
-UPLOADS_ROOT.mkdir(parents=True, exist_ok=True)
 
 
 def configure_cloudinary():
@@ -28,21 +21,15 @@ def configure_cloudinary():
     api_secret = os.getenv("CLOUDINARY_API_SECRET")
     
     # Validate that all required variables are set
-    if not cloud_name or not api_key or not api_secret:
-        missing = [
-            name
-            for name, value in [
-                ("CLOUDINARY_CLOUD_NAME", cloud_name),
-                ("CLOUDINARY_API_KEY", api_key),
-                ("CLOUDINARY_API_SECRET", api_secret),
-            ]
-            if not value
-        ]
-        logger.warning(
-            f"Cloudinary not configured; missing: {', '.join(missing)}. "
-            "Falling back to local uploads directory."
-        )
-        return False
+    if not cloud_name:
+        logger.error("CLOUDINARY_CLOUD_NAME environment variable is not set")
+        raise ValueError("CLOUDINARY_CLOUD_NAME environment variable is required")
+    if not api_key:
+        logger.error("CLOUDINARY_API_KEY environment variable is not set")
+        raise ValueError("CLOUDINARY_API_KEY environment variable is required")
+    if not api_secret:
+        logger.error("CLOUDINARY_API_SECRET environment variable is not set")
+        raise ValueError("CLOUDINARY_API_SECRET environment variable is required")
     
     cloudinary.config(
         cloud_name=cloud_name,
@@ -51,11 +38,13 @@ def configure_cloudinary():
         secure=True  # Always use HTTPS
     )
     logger.info("Cloudinary configured successfully")
-    return True
 
 
 # Configure Cloudinary when module is imported
-CLOUDINARY_CONFIGURED = configure_cloudinary()
+try:
+    configure_cloudinary()
+except ValueError as e:
+    logger.warning(f"Cloudinary not configured: {e}. Image uploads will fail until configured.")
 
 
 def upload_file_to_cloudinary(
@@ -97,41 +86,6 @@ def upload_file_to_cloudinary(
     except Exception as e:
         logger.error(f"Failed to upload file to Cloudinary: {e}")
         raise Exception(f"Failed to upload image: {str(e)}")
-
-
-def upload_file_locally(
-    file_content: bytes,
-    filename: str,
-    folder: str = "butrift/uploads"
-) -> str:
-    """
-    Save an image to the local uploads directory and return a URL.
-    This is used as a fallback when Cloudinary is not configured.
-    """
-    safe_folder = folder.strip("/")
-    target_dir = UPLOADS_ROOT / safe_folder
-    target_dir.mkdir(parents=True, exist_ok=True)
-
-    file_path = target_dir / filename
-    with open(file_path, "wb") as f:
-        f.write(file_content)
-
-    # URL relative to StaticFiles mount at /uploads
-    return f"/uploads/{safe_folder}/{filename}"
-
-
-def upload_file(
-    file_content: bytes,
-    filename: str,
-    folder: str = "butrift/uploads"
-) -> str:
-    """
-    Upload an image, preferring Cloudinary when configured, otherwise falling back to local storage.
-    """
-    if CLOUDINARY_CONFIGURED:
-        return upload_file_to_cloudinary(file_content, filename, folder)
-    logger.info("Using local upload storage because Cloudinary is not configured.")
-    return upload_file_locally(file_content, filename, folder)
 
 
 def delete_file_from_cloudinary(public_id: str) -> bool:

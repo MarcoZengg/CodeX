@@ -23,7 +23,7 @@ from auth import verify_token
 import firebase_config  # noqa: F401
 
 # Import Cloudinary storage helper
-from storage import upload_file
+from storage import upload_file_to_cloudinary
 
 logger = logging.getLogger(__name__)
 
@@ -292,7 +292,7 @@ async def upload_image(
     
     try:
         # Upload to Cloudinary (synchronous function, no await needed)
-        public_url = upload_file(
+        public_url = upload_file_to_cloudinary(
             file_content=content,
             filename=safe_filename,
             folder="butrift/uploads"
