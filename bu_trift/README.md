@@ -27,8 +27,8 @@ According to the course requirements:
 - **Sell Page**: Form to create new listings with image upload (requires authentication)
 - **Login Page**: User login with Firebase Authentication
 - **Register Page**: User registration with Firebase Authentication
-- **Messages Page**: Conversation list and messaging interface with real-time updates via WebSocket
-- **Profile Page**: User profile with listings and stats (requires authentication)
+- **Messages Page**: Conversation list and messaging interface with real-time updates via WebSocket, unread message indicators, conversation snippets, and user avatars
+- **Profile Page**: User profile with listings and stats, delete listings, mark items as sold, filter by Active/Sold/All (requires authentication)
 
 #### UI/UX
 - Responsive design (Mobile & Desktop)
@@ -55,6 +55,8 @@ According to the course requirements:
   - ✅ GET all items (`/api/items`) with filtering support
   - ✅ GET item by ID (`/api/items/{item_id}`)
   - ✅ POST create item (`/api/items`) - Protected with Firebase auth
+  - ✅ PUT update item status (`/api/items/{item_id}/status`) - Mark as sold/reserved/available
+  - ✅ DELETE item (`/api/items/{item_id}`) - Protected with Firebase auth
   - ✅ Database persistence with SQLite
 - ✅ **User Management Service**: Complete with Firebase authentication
   - ✅ POST create profile (`/api/users/create-profile`) - Protected with Firebase
@@ -65,6 +67,7 @@ According to the course requirements:
   - ✅ Conversations CRUD (Create, Read, Update, Delete) - All protected with Firebase auth
   - ✅ Messages CRUD (Create, Read, Update, Delete) - All protected with Firebase auth
   - ✅ Real-time messaging via WebSocket (`/ws/{user_id}`) - Requires Firebase token authentication
+  - ✅ Unread message counts and conversation snippets in API responses
   - ✅ Database persistence for conversations and messages
   - ✅ Authorization checks ensure users can only access their own conversations
 
@@ -86,22 +89,32 @@ According to the course requirements:
   - ✅ `User.register()` - Register new user with Firebase (`POST /api/users/create-profile`)
   - ✅ `User.getById()` - Get public user profile (`GET /api/users/{user_id}`)
   - ✅ `User.me()` - Get current user profile with Firebase token (`GET /api/users/me`)
-- ✅ **Firebase Authentication**: Fully integrated
+- ✅ **Firebase Authentication**: Fully integrated with automatic token refresh
   - ✅ Firebase login/registration on frontend
   - ✅ Firebase token stored in localStorage
   - ✅ Protected endpoints use Firebase token verification
+  - ✅ Automatic token refresh every 50 minutes to prevent expiration
+  - ✅ Automatic retry on 401 errors with refreshed token
+  - ✅ Seamless user experience without token expiration interruptions
 - ✅ **Error Handling**: Try-catch blocks for API calls
-- ✅ **Image Upload**: Fully implemented
+- ✅ **Image Upload**: Fully implemented with Cloudinary
   - ✅ Image upload on sell page (`POST /api/upload-image`) - Protected with Firebase auth
-  - ✅ Images stored in `backend/uploads` directory
+  - ✅ Images stored in Cloudinary cloud storage
+  - ✅ Cloudinary integration for reliable, scalable image hosting
   - ✅ Image URLs saved in database `images` column (JSON array)
   - ✅ Images displayed in item cards and item details pages
 - ✅ **Messaging**: Fully implemented with real-time WebSocket support and authentication
   - ✅ Conversations CRUD operations (all protected with Firebase authentication)
   - ✅ Messages CRUD operations (all protected with Firebase authentication)
   - ✅ Real-time messaging via WebSocket (requires Firebase token authentication)
-  - ✅ Frontend messaging page with live updates
+  - ✅ Frontend messaging page with live updates, unread badges, conversation snippets, and user avatars
+  - ✅ Unread message counts update automatically
   - ✅ Authorization ensures users can only access their own conversations
+- ✅ **Profile Management**: Enhanced with listing management
+  - ✅ Delete own listings with confirmation
+  - ✅ Mark listings as sold/reserved
+  - ✅ Filter listings by Active/Sold/All status
+  - ✅ Local state management and error handling
 
 ### ⏳ Pending Implementation
 
@@ -252,6 +265,20 @@ bu_trift/
 
 **Important**: `firebase_service.json` is **NOT** in Git for security. Each developer must add their own file to `backend/` directory.
 
+### Cloudinary Setup (Required for Image Uploads)
+
+1. **Create a Cloudinary Account** (if you don't have one):
+   - Go to [Cloudinary Console](https://cloudinary.com/console)
+   - Sign up for a free account
+   - Copy your credentials from the dashboard
+
+2. **Set Environment Variables**:
+   - `CLOUDINARY_CLOUD_NAME` - Your Cloudinary cloud name
+   - `CLOUDINARY_API_KEY` - Your Cloudinary API key
+   - `CLOUDINARY_API_SECRET` - Your Cloudinary API secret
+
+**Note**: Cloudinary credentials are required for image uploads. The backend will fail to start if Cloudinary is not configured properly.
+
 ### Installation
 
 1. Clone the repository:
@@ -358,9 +385,11 @@ Or use a production ASGI server like Gunicorn with Uvicorn workers.
   - `Item.filter()` - Calls `GET /api/items` (with fallback to mock data)
   - `Item.get()` - Calls `GET /api/items/{id}` (with fallback to mock data)
   - `Item.create()` - Calls `POST /api/items` to create items in database (with image support)
+  - `Item.delete()` - Calls `DELETE /api/items/{id}` to delete item listings (with automatic token refresh)
+  - `Item.updateStatus()` - Calls `PUT /api/items/{id}/status` to update item status (with automatic token refresh)
 - **Image Upload** (`app/routes/sell.tsx`)
   - `handleFileUpload()` - Uploads images to `POST /api/upload-image`
-  - Images saved to `backend/uploads` directory
+  - Images uploaded to Cloudinary cloud storage
   - Image URLs stored in database and displayed in item views
 
 #### ✅ Fully Integrated with Backend (All Entities)
@@ -384,6 +413,8 @@ Or use a production ASGI server like Gunicorn with Uvicorn workers.
 - `GET /api/items` - Get all items (supports filtering by seller_id, category, condition, status)
 - `GET /api/items/{item_id}` - Get item by ID
 - `POST /api/items` - Create new item (with images support, protected with Firebase, validates price > 0)
+- `PUT /api/items/{item_id}/status` - Update item status (available/sold/reserved, protected with Firebase, only seller can update)
+- `DELETE /api/items/{item_id}` - Delete item listing (protected with Firebase, only seller can delete)
 
 **User Endpoints (Firebase Authentication):**
 - `POST /api/users/create-profile` - Create user profile (requires Firebase token) - Protected
@@ -391,12 +422,12 @@ Or use a production ASGI server like Gunicorn with Uvicorn workers.
 - `GET /api/users/{user_id}` - Get public user profile by ID - Public
 
 **Image Upload Endpoints:**
-- `POST /api/upload-image` - Upload a single image file (returns URL) - Protected with Firebase, includes file validation (type, size, filename sanitization)
-- `GET /uploads/{filename}` - Serve uploaded images (static files)
+- `POST /api/upload-image` - Upload a single image file to Cloudinary (returns public URL) - Protected with Firebase, includes file validation (type, size, filename sanitization)
+- Images are stored in Cloudinary cloud storage for reliable, persistent hosting
 
 **Messaging Endpoints (All Protected with Firebase Authentication):**
 - `POST /api/conversations` - Create a new conversation (requires auth, validates participants)
-- `GET /api/conversations` - Get all conversations for a user (query param: `user_id`, requires auth, verifies user_id)
+- `GET /api/conversations` - Get all conversations for a user (query param: `user_id`, requires auth, verifies user_id, includes unread_count and last_message_snippet)
 - `GET /api/conversations/{conversation_id}` - Get a specific conversation (requires auth, verifies participant)
 - `PUT /api/conversations/{conversation_id}` - Update conversation (requires auth, verifies participant)
 - `DELETE /api/conversations/{conversation_id}` - Delete conversation (requires auth, verifies participant)
@@ -435,7 +466,8 @@ The application supports **both SQLite (development) and PostgreSQL (production)
 - **messages** table: `id`, `conversation_id`, `sender_id`, `content`, `is_read`, `created_date`
 
 **Important Notes**:
-- The `backend/uploads/` directory for storing uploaded images is automatically created when the backend server starts
+- Images are stored in **Cloudinary cloud storage** (not locally)
+- Cloudinary configuration is required via environment variables (see Cloudinary Setup above)
 - If upgrading from password-based authentication, **delete** `backend/butrift.db` to recreate it with the new schema (includes `firebase_uid` instead of `password_hash`)
 - The database file is already in `.gitignore` and should not be committed
 
@@ -512,8 +544,10 @@ These provide automatic documentation for all API endpoints with the ability to 
 
 #### Authentication & Authorization
 - ✅ **Firebase Token Verification**: All protected endpoints verify Firebase ID tokens
+- ✅ **Automatic Token Refresh**: Client-side token refresh every 50 minutes prevents expiration errors
+- ✅ **Token Retry Logic**: Automatic retry on 401 errors with refreshed token
 - ✅ **WebSocket Authentication**: WebSocket connections require Firebase token in query parameter
-- ✅ **Authorization Checks**: Users can only access their own data (conversations, messages)
+- ✅ **Authorization Checks**: Users can only access their own data (conversations, messages, items)
 - ✅ **User ID Verification**: Prevents impersonation attacks via user_id matching
 
 #### Input Validation
@@ -542,6 +576,8 @@ The following endpoints require a valid Firebase authentication token in the `Au
 
 **Item Endpoints:**
 - `POST /api/items`
+- `PUT /api/items/{item_id}/status`
+- `DELETE /api/items/{item_id}`
 
 **Image Upload:**
 - `POST /api/upload-image`
@@ -572,10 +608,9 @@ The following endpoints require a valid Firebase authentication token in the `Au
 - ✅ **Transaction Safety**: Database operations use transactions to maintain data integrity
 - ✅ **Connection Security**: WebSocket connections authenticated to prevent unauthorized access
 
-### Recent Security Improvements
+### Recent Improvements
 
-A comprehensive security audit was completed with the following enhancements:
-
+#### Security Enhancements
 1. **WebSocket Security**: Added Firebase token authentication to prevent unauthorized message interception
 2. **Authorization**: Added checks to ensure users can only access their own conversations and messages
 3. **File Upload Security**: Implemented comprehensive validation to prevent malicious file uploads
@@ -583,7 +618,22 @@ A comprehensive security audit was completed with the following enhancements:
 5. **Input Validation**: Enhanced validation for messages, prices, and user inputs
 6. **Session Management**: Fixed WebSocket database session handling to prevent connection leaks
 
-See `docs/COMPREHENSIVE_CHANGES_SUMMARY.md` for detailed information about all security improvements.
+#### Reliability Improvements
+1. **Automatic Token Refresh**: Implemented client-side Firebase token refresh to prevent expiration errors
+   - Tokens automatically refresh every 50 minutes
+   - Automatic retry on 401 errors with refreshed token
+   - Seamless user experience without interruptions
+2. **Cloudinary Integration**: Migrated image storage to Cloudinary for reliable, scalable hosting
+   - Persistent cloud storage (not ephemeral)
+   - CDN delivery for fast image loading
+   - Production-ready solution
+
+#### Feature Additions
+1. **Item Management**: Delete listings and update item status (sold/reserved/available)
+2. **Enhanced Messaging**: Unread message counts, conversation snippets, and user avatars
+3. **Improved Profile**: Filter listings by status, manage own listings
+
+See `docs/COMPREHENSIVE_CHANGES_SUMMARY.md` and `docs/FIREBASE_TOKEN_EXPIRATION_FIX_CONCLUSION.md` for detailed information about all improvements.
 
 ## 🚀 Deployment
 
@@ -645,7 +695,9 @@ The application is **production-ready** and can be deployed to Render with full 
 - `DATABASE_URL` - PostgreSQL connection string (from Render)
 - `FIREBASE_SERVICE_ACCOUNT` - Firebase service account JSON
 - `FRONTEND_URL` - Frontend URL for CORS configuration
-- `API_BASE_URL` - Backend URL (optional, for file URLs)
+- `CLOUDINARY_CLOUD_NAME` - Cloudinary cloud name (required for image uploads)
+- `CLOUDINARY_API_KEY` - Cloudinary API key (required for image uploads)
+- `CLOUDINARY_API_SECRET` - Cloudinary API secret (required for image uploads)
 
 **Frontend:**
 - `VITE_API_URL` - Backend API URL
@@ -668,9 +720,9 @@ The application is **production-ready** and can be deployed to Render with full 
 
 #### Important Notes
 
-⚠️ **File Uploads:**
-- Local file storage is ephemeral on Render (files lost on restart)
-- Consider migrating to cloud storage (Firebase Storage, S3) for production
+✅ **File Uploads:**
+- Images are stored in Cloudinary cloud storage (persistent and reliable)
+- No local file storage - all images are hosted on Cloudinary CDN
 
 ⚠️ **WebSocket:**
 - Free tier may have limitations with persistent WebSocket connections
