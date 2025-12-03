@@ -134,36 +134,25 @@ export default function Login(_props: Route.ComponentProps) {
       const idToken = await user.getIdToken(true);
       localStorage.setItem("firebaseToken", idToken);
 
-      // Load or create user profile from FastAPI
-      let response = await fetch(`${API_URL}/api/users/me`, {
+      // Load user profile from FastAPI (ONLY for existing users)
+      const response = await fetch(`${API_URL}/api/users/me`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${idToken}`,
         },
       });
 
-      // If user doesn't exist, create profile
+      // If user doesn't exist, sign them out and redirect to register
       if (response.status === 404) {
-        // Create profile with Google account info
-        const createResponse = await fetch(`${API_URL}/api/users/create-profile`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${idToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email: user.email!.toLowerCase(),
-            display_name: user.displayName || user.email!.split("@")[0],
-            bio: undefined,
-          }),
-        });
-
-        if (!createResponse.ok) {
-          const errorData = await createResponse.json().catch(() => ({}));
-          throw new Error(errorData.detail || "Failed to create profile");
-        }
-
-        response = createResponse;
+        await signOut(auth);
+        localStorage.removeItem("firebaseToken");
+        setIsSubmitting(false);
+        // Show message and redirect to register page where they can sign up with Google
+        setError("No account found with this Google email. Redirecting to sign up...");
+        setTimeout(() => {
+          navigate(`${createPageUrl("Register")}?from=google-login`);
+        }, 1500); // Show message for 1.5 seconds before redirecting
+        return;
       }
 
       if (!response.ok) {

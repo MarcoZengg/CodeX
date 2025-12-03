@@ -21,6 +21,12 @@ export function meta() {
   ];
 }
 
+export async function loader() {
+  // React Router requires a loader function, but we don't need to load any data
+  // Authentication check happens in the component itself
+  return null;
+}
+
 export default function CompleteProfile() {
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
