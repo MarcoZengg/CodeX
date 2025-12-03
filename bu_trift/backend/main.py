@@ -6,10 +6,14 @@ from pydantic import BaseModel
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from database import get_db, engine, Base
+from typing import Optional, List
+
 from models.item import ItemDB
 from models.user import UserDB
 from models.conversation import ConversationDB
 from models.message import MessageDB
+from models.transaction import TransactionDB
+
 import uuid
 from datetime import datetime
 import os
@@ -92,6 +96,39 @@ class ItemResponse(BaseModel):
 
 class ItemStatusUpdate(BaseModel):
     status: str
+
+class TransactionCreate(BaseModel):
+    item_id: str
+    conversation_id: str
+    buyer_id: str
+    seller_id: str
+    meetup_time: Optional[str] = None  # ISO datetime string
+    meetup_place: Optional[str] = None
+
+class TransactionUpdate(BaseModel):
+    status: Optional[str] = None
+    buyer_confirmed: Optional[bool] = None
+    seller_confirmed: Optional[bool] = None
+    meetup_time: Optional[str] = None
+    meetup_place: Optional[str] = None
+    meetup_lat: Optional[float] = None
+    meetup_lng: Optional[float] = None
+
+class TransactionResponse(BaseModel):
+    id: str
+    item_id: str
+    buyer_id: str
+    seller_id: str
+    conversation_id: str
+    status: str
+    buyer_confirmed: bool
+    seller_confirmed: bool
+    meetup_time: Optional[str]
+    meetup_place: Optional[str]
+    meetup_lat: Optional[float]
+    meetup_lng: Optional[float]
+    created_date: str
+    completed_date: Optional[str]
 
 
 class UserRegister(BaseModel):
@@ -227,6 +264,25 @@ def conversation_to_response(
         "updated_date": conversation.updated_date.isoformat() if conversation.updated_date else datetime.now().isoformat(),
         "last_message_snippet": last_message_snippet,
         "unread_count": unread_count,
+    }
+
+def transaction_to_response(transaction: TransactionDB) -> dict:
+    """Convert TransactionDB to response dictionary"""
+    return {
+        "id": transaction.id,
+        "item_id": transaction.item_id,
+        "buyer_id": transaction.buyer_id,
+        "seller_id": transaction.seller_id,
+        "conversation_id": transaction.conversation_id,
+        "status": transaction.status,
+        "buyer_confirmed": transaction.buyer_confirmed,
+        "seller_confirmed": transaction.seller_confirmed,
+        "meetup_time": transaction.meetup_time.isoformat() if transaction.meetup_time else None,
+        "meetup_place": transaction.meetup_place,
+        "meetup_lat": transaction.meetup_lat,
+        "meetup_lng": transaction.meetup_lng,
+        "created_date": transaction.created_date.isoformat() if transaction.created_date else None,
+        "completed_date": transaction.completed_date.isoformat() if transaction.completed_date else None,
     }
 
 
@@ -455,6 +511,170 @@ def delete_item(
     except SQLAlchemyError as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to delete item: {str(e)}")
+
+
+@app.post("/api/transactions", response_model=TransactionResponse)
+def create_transaction(
+    transaction_data: TransactionCreate,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """
+    Create a new transaction.
+    Only the buyer or seller can create a transaction for their conversation.
+    """
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    
+    # Verify user is either buyer or seller
+    if transaction_data.buyer_id != user.id and transaction_data.seller_id != user.id:
+        raise HTTPException(status_code=403, detail="You can only create transactions for your own conversations")
+    
+    # Verify conversation exists and user is a participant
+    conversation = db.query(ConversationDB).filter(ConversationDB.id == transaction_data.conversation_id).first()
+    if not conversation:
+        raise HTTPException(404, "Conversation not found")
+    
+    if conversation.participant1_id != user.id and conversation.participant2_id != user.id:
+        raise HTTPException(status_code=403, detail="You can only create transactions for conversations you're part of")
+    
+    # Check if transaction already exists for this conversation
+    existing = db.query(TransactionDB).filter(TransactionDB.conversation_id == transaction_data.conversation_id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Transaction already exists for this conversation")
+    
+    # Parse meetup_time if provided
+    meetup_time = None
+    if transaction_data.meetup_time:
+        try:
+            meetup_time = datetime.fromisoformat(transaction_data.meetup_time.replace('Z', '+00:00'))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid meetup_time format. Use ISO datetime format.")
+    
+    try:
+        transaction = TransactionDB(
+            id=str(uuid.uuid4()),
+            item_id=transaction_data.item_id,
+            buyer_id=transaction_data.buyer_id,
+            seller_id=transaction_data.seller_id,
+            conversation_id=transaction_data.conversation_id,
+            status="in_progress",
+            buyer_confirmed=False,
+            seller_confirmed=False,
+            meetup_time=meetup_time,
+            meetup_place=transaction_data.meetup_place,
+        )
+        db.add(transaction)
+        db.commit()
+        db.refresh(transaction)
+        return transaction_to_response(transaction)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create transaction: {str(e)}")
+
+
+@app.get("/api/transactions/by_conversation/{conversation_id}", response_model=TransactionResponse)
+def get_transaction_by_conversation(
+    conversation_id: str,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """
+    Get transaction by conversation ID.
+    Only participants of the conversation can access it.
+    """
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    
+    # Verify user is participant in conversation
+    conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
+    if not conversation:
+        raise HTTPException(404, "Conversation not found")
+    
+    if conversation.participant1_id != user.id and conversation.participant2_id != user.id:
+        raise HTTPException(status_code=403, detail="You can only access transactions for your own conversations")
+    
+    transaction = db.query(TransactionDB).filter(TransactionDB.conversation_id == conversation_id).first()
+    if not transaction:
+        raise HTTPException(404, "Transaction not found")
+    
+    return transaction_to_response(transaction)
+
+
+@app.patch("/api/transactions/{transaction_id}", response_model=TransactionResponse)
+def update_transaction(
+    transaction_id: str,
+    update_data: TransactionUpdate,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """
+    Update a transaction.
+    Only the buyer or seller can update their transaction.
+    """
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    
+    transaction = db.query(TransactionDB).filter(TransactionDB.id == transaction_id).first()
+    if not transaction:
+        raise HTTPException(404, "Transaction not found")
+    
+    # Verify user is buyer or seller
+    if transaction.buyer_id != user.id and transaction.seller_id != user.id:
+        raise HTTPException(status_code=403, detail="You can only update your own transactions")
+    
+    try:
+        # Update fields if provided
+        if update_data.status is not None:
+            transaction.status = update_data.status
+        
+        if update_data.buyer_confirmed is not None:
+            if transaction.buyer_id != user.id:
+                raise HTTPException(status_code=403, detail="Only the buyer can set buyer_confirmed")
+            transaction.buyer_confirmed = update_data.buyer_confirmed
+        
+        if update_data.seller_confirmed is not None:
+            if transaction.seller_id != user.id:
+                raise HTTPException(status_code=403, detail="Only the seller can set seller_confirmed")
+            transaction.seller_confirmed = update_data.seller_confirmed
+        
+        if update_data.meetup_time is not None:
+            if update_data.meetup_time:
+                try:
+                    transaction.meetup_time = datetime.fromisoformat(update_data.meetup_time.replace('Z', '+00:00'))
+                except ValueError:
+                    raise HTTPException(status_code=400, detail="Invalid meetup_time format")
+            else:
+                transaction.meetup_time = None
+        
+        if update_data.meetup_place is not None:
+            transaction.meetup_place = update_data.meetup_place
+        
+        if update_data.meetup_lat is not None:
+            transaction.meetup_lat = update_data.meetup_lat
+        
+        if update_data.meetup_lng is not None:
+            transaction.meetup_lng = update_data.meetup_lng
+        
+        # Auto-complete transaction if both parties confirmed
+        if transaction.buyer_confirmed and transaction.seller_confirmed:
+            transaction.status = "completed"
+            transaction.completed_date = datetime.now()
+        
+        db.commit()
+        db.refresh(transaction)
+        return transaction_to_response(transaction)
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update transaction: {str(e)}")
 
 
 # ============================

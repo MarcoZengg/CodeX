@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router";
-import { Item, Review } from "@/entities";
+import { Item } from "@/entities";
+import { ReviewEntity } from "@/entities/Review";
 import type { Item as ItemType } from "@/entities/Item";
 import type { Review as ReviewType } from "@/entities/Review";
 import {
@@ -13,6 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { Star, Package, Calendar } from "lucide-react";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
+import ReviewForm from "../components/ReviewForm";
+
 
 export function meta() {
   return [
@@ -29,6 +32,16 @@ export default function UserProfile() {
   const [items, setItems] = useState<ItemType[]>([]);
   const [reviews, setReviews] = useState<ReviewType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // TEMP: get logged-in user id from localStorage if your auth stores it here
+    // If nothing is stored, no review form will show.
+    if (typeof window !== "undefined") {
+      const stored = window.localStorage.getItem("userId");
+      if (stored) setCurrentUserId(stored);
+    }
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -43,7 +56,7 @@ export default function UserProfile() {
         "-created_date"
       );
       setItems(userItems);
-      const userReviews = await Review.filter({
+      const userReviews = await ReviewEntity.filter({
         reviewee_id: userId,
       });
       setReviews(userReviews);
@@ -85,6 +98,7 @@ export default function UserProfile() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-neutral-50 p-6">
       <div className="max-w-4xl mx-auto space-y-8">
+        {/* Profile header card */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -155,6 +169,35 @@ export default function UserProfile() {
           </Card>
         </motion.div>
 
+        {/* Leave a review form (only if logged-in user is not the profile owner) */}
+        {currentUserId && currentUserId !== id && (
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.05 }}
+          >
+            <Card className="border-neutral-200/60">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Star className="w-5 h-5 text-yellow-400 fill-current" />
+                  Leave a review
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ReviewForm
+                  reviewerId={currentUserId}
+                  revieweeId={id}
+                  onCreated={(newReview: ReviewType) => {
+                    // update local state so stats & list reflect new review
+                    setReviews((prev) => [...prev, newReview]);
+                  }}
+                />
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Reviews list */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -214,6 +257,7 @@ export default function UserProfile() {
           </Card>
         </motion.div>
 
+        {/* Items list */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}

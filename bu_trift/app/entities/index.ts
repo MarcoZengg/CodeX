@@ -3,12 +3,14 @@ import type { Item as ItemType, ItemCategory, ItemCondition, ItemStatus } from "
 import type { Message as MessageType } from "./Message";
 import type { Conversation as ConversationType } from "./Conversation";
 import type { User as UserType, UserRegister, UserLogin } from "./User";
+import type { Transaction as TransactionType } from "./Transaction";
 
 // Import entity classes for re-export
 import { ItemEntity } from "./Item";
 import { MessageEntity } from "./Message";
 import { ConversationEntity } from "./Conversation";
 import { UserEntity } from "./User";
+import { TransactionEntity } from "./Transaction";
 
 // Note: For type imports, import directly from the source files:
 // import type { Item } from "@/entities/Item";
@@ -64,9 +66,31 @@ const UserService = {
     UserEntity.update(payload as any),
 };
 
+const TransactionService = {
+  getByConversation: async (
+    conversation_id: string
+  ): Promise<TransactionType | null> => TransactionEntity.getByConversation(conversation_id),
+
+  create: async (data: {
+    item_id: string;
+    conversation_id: string;
+    buyer_id: string;
+    seller_id: string;
+    meetup_time?: string | null;
+    meetup_place?: string | null;
+  }): Promise<TransactionType> => TransactionEntity.create(data),
+
+  update: async (
+    id: string,
+    data: Partial<TransactionType>
+  ): Promise<TransactionType> => TransactionEntity.update(id, data),
+};
+
+
 // Export runtime objects as values (this is a value export, not a type)
 // TypeScript will distinguish between: import { Item } (value) vs import type { Item } (type)
 export { ItemService as Item };
 export { MessageService as Message };
 export { ConversationService as Conversation };
 export { UserService as User };
+export { TransactionService as Transaction };
