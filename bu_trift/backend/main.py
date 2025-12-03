@@ -105,6 +105,11 @@ class UserUpdate(BaseModel):
     bio: Optional[str] = None
     profile_image_url: Optional[str] = None
 
+class CompleteProfileRequest(BaseModel):
+    password: str
+    display_name: str
+    bio: Optional[str] = None
+
 
 class UserResponse(BaseModel):
     id: str
@@ -545,6 +550,120 @@ def update_current_user(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update profile: {str(e)}")
+
+
+@app.post("/api/users/complete-profile")
+def complete_profile(
+    profile_data: CompleteProfileRequest,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """
+    Complete user profile after Google sign-up.
+    Sets password in Firebase and updates display_name/bio in database.
+    """
+    firebase_uid = token_data["uid"]
+    
+    # Validate password
+    if len(profile_data.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters long")
+    
+    # Get user from database
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    
+    try:
+        # Set password in Firebase using Admin SDK
+        from firebase_admin import auth as firebase_auth
+        
+        firebase_auth.update_user(
+            firebase_uid,
+            password=profile_data.password
+        )
+        
+        logger.info(f"Password set for Firebase user {firebase_uid}")
+        
+        # Update display_name and bio in database
+        user.display_name = profile_data.display_name.strip()
+        if profile_data.bio:
+            user.bio = profile_data.bio.strip()
+        
+        db.commit()
+        db.refresh(user)
+        
+        logger.info(f"Profile completed for user {user.id} ({user.email})")
+        
+        return user_to_response(user)
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error completing profile: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to complete profile: {str(e)}")
+
+
+@app.delete("/api/users/me")
+def delete_current_user(
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """
+    Delete current user's account.
+    Deletes from both Firebase and backend database (including all related data).
+    """
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    
+    if not user:
+        raise HTTPException(404, "User not found")
+    
+    user_id = user.id
+    
+    try:
+        # Delete all related data first
+        # 1. Delete all items by this user
+        items = db.query(ItemDB).filter(ItemDB.seller_id == user_id).all()
+        for item in items:
+            db.delete(item)
+        
+        # 2. Delete all conversations where user is a participant
+        conversations = db.query(ConversationDB).filter(
+            (ConversationDB.participant1_id == user_id) |
+            (ConversationDB.participant2_id == user_id)
+        ).all()
+        
+        # Delete all messages in these conversations
+        for conversation in conversations:
+            messages = db.query(MessageDB).filter(MessageDB.conversation_id == conversation.id).all()
+            for message in messages:
+                db.delete(message)
+            db.delete(conversation)
+        
+        # 3. Delete all messages sent by this user (in case any remain)
+        remaining_messages = db.query(MessageDB).filter(MessageDB.sender_id == user_id).all()
+        for message in remaining_messages:
+            db.delete(message)
+        
+        # 4. Delete user from database
+        db.delete(user)
+        db.commit()
+        
+        logger.info(f"User {user_id} ({user.email}) and all related data deleted from database")
+        
+        # 5. Delete user from Firebase
+        try:
+            from firebase_admin import auth as firebase_auth
+            firebase_auth.delete_user(firebase_uid)
+            logger.info(f"Firebase user {firebase_uid} deleted")
+        except Exception as firebase_error:
+            logger.error(f"Failed to delete Firebase user {firebase_uid}: {firebase_error}")
+            # Note: Database deletion already succeeded, so we continue
+        
+        return {"message": "Account deleted successfully"}
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting user account: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete account: {str(e)}")
 
 
 @app.get("/api/users/{user_id}", response_model=UserResponse)

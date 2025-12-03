@@ -25,6 +25,7 @@ export function createPageUrl(page: string): string {
     About: "/about",
     Register: "/register",
     Login: "/login",
+    CompleteProfile: "/complete-profile",
   };
 
   return routeMap[page] || `/${page.toLowerCase()}`;

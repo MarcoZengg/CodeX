@@ -202,5 +202,28 @@ export class UserEntity {
     localStorage.removeItem("firebaseToken");
     localStorage.removeItem("currentUser");
   }
+
+  /**
+   * Delete current user's account.
+   * Deletes from both Firebase and backend database.
+   */
+  static async deleteAccount(): Promise<void> {
+    const token = await getFirebaseToken(false);
+    if (!token) throw new Error("Not authenticated");
+
+    const response = await fetchWithAuth(`${API_URL}/api/users/me`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || "Failed to delete account");
+    }
+
+    // Sign out after successful deletion
+    await signOut(auth);
+    localStorage.removeItem("firebaseToken");
+    localStorage.removeItem("currentUser");
+  }
 }
 

@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import type { User as UserType } from "@/entities/User";
 import { UserEntity } from "@/entities/User";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { createPageUrl } from "@/utils";
 import { API_URL } from "@/config";
+import { Trash2, Loader2, AlertTriangle } from "lucide-react";
 
 export function meta() {
   return [{ title: "Edit Profile - BUTrift" }];
@@ -22,6 +23,8 @@ export default function EditProfile() {
   const [localPreview, setLocalPreview] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem("currentUser");
@@ -122,6 +125,45 @@ export default function EditProfile() {
     }
   };
 
+  const handleDeleteAccount = async () => {
+    if (!showDeleteConfirm) {
+      setShowDeleteConfirm(true);
+      return;
+    }
+
+    // Final confirmation
+    const confirmed = window.confirm(
+      "⚠️ PERMANENT ACTION ⚠️\n\n" +
+      "This will permanently delete:\n" +
+      "• Your account from Firebase\n" +
+      "• Your profile from the database\n" +
+      "• All your listings\n" +
+      "• All your conversations and messages\n\n" +
+      "This action CANNOT be undone.\n\n" +
+      "Are you absolutely sure?"
+    );
+
+    if (!confirmed) {
+      setShowDeleteConfirm(false);
+      return;
+    }
+
+    setIsDeletingAccount(true);
+    setError(null);
+
+    try {
+      await UserEntity.deleteAccount();
+      // Redirect to home page after account deletion
+      window.location.href = createPageUrl("Home");
+    } catch (e: any) {
+      console.error("Error deleting account:", e);
+      setError(e.message || "Failed to delete account. Please try again.");
+      setShowDeleteConfirm(false);
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  };
+
   if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-white to-neutral-50 p-6">
@@ -188,6 +230,63 @@ export default function EditProfile() {
                 {isSaving ? "Saving..." : "Save Changes"}
               </Button>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Danger Zone - Delete Account */}
+        <Card className="mt-6 border-red-200 bg-red-50">
+          <CardHeader>
+            <CardTitle className="text-red-800 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5" />
+              Danger Zone
+            </CardTitle>
+            <CardDescription className="text-red-700">
+              Proceed with caution. These actions are irreversible.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-semibold text-red-800">Delete Account</h4>
+                <p className="text-sm text-red-700">
+                  Permanently delete your account and all associated data.
+                </p>
+              </div>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteAccount}
+                disabled={isDeletingAccount}
+                className="flex items-center gap-2"
+              >
+                {isDeletingAccount ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : showDeleteConfirm ? (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Confirm Delete Account
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Delete My Account
+                  </>
+                )}
+              </Button>
+            </div>
+            {showDeleteConfirm && (
+              <div className="bg-red-100 border border-red-300 text-red-800 px-4 py-3 rounded-lg text-sm">
+                <p className="font-semibold mb-2">⚠️ Warning</p>
+                <p className="mb-2">
+                  Click "Confirm Delete Account" again to finalize. This cannot be undone.
+                </p>
+                <p className="text-xs">
+                  All your data will be permanently deleted, including listings, conversations, and messages.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
