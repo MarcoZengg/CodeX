@@ -9,6 +9,8 @@ export interface Message {
   content: string;
   is_read: boolean;
   created_date: string;
+  message_type?: string; // "text" or "buy_request"
+  buy_request_id?: string | null;
 }
 
 export interface Conversation {

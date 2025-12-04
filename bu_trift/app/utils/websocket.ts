@@ -41,8 +41,11 @@ export class WebSocketClient {
       this.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          console.log(`[WebSocket] Received message type: ${data.type}`, data);
           if (this.onMessageCallback) {
             this.onMessageCallback(data);
+          } else {
+            console.warn('[WebSocket] Message received but no callback set:', data);
           }
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);

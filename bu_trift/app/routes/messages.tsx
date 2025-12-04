@@ -1,18 +1,171 @@
 import { useEffect, useState, useRef } from "react";
 import type { Route } from "./+types/messages";
-import { Conversation, User, Message } from "@/entities";
+import { Conversation, User, Message, BuyRequest, Transaction, Item } from "@/entities";
 import type { Conversation as ConversationType } from "@/entities/Conversation";
 import type { User as UserType } from "@/entities/User";
 import type { Message as MessageType } from "@/entities/Message";
+import type { BuyRequest as BuyRequestType } from "@/entities/BuyRequest";
+import type { Transaction as TransactionType } from "@/entities/Transaction";
 import { MessageEntity } from "@/entities/Message";
 import { WebSocketClient } from "@/utils/websocket";
 import { API_URL } from "@/config";
+import { useNavigate } from "react-router";
+import { createPageUrl } from "@/utils";
 
 export function meta({}: Route.MetaArgs) {
   return [
     { title: "Messages - BUTrift" },
     { name: "description", content: "View your conversations" },
   ];
+}
+
+// Buy Request Message Component
+function BuyRequestMessageComponent({
+  message,
+  buyRequest,
+  currentUser,
+  onAccept,
+  onReject,
+  onCancel,
+}: {
+  message: MessageType;
+  buyRequest: BuyRequestType;
+  currentUser: UserType | null;
+  onAccept: () => void;
+  onReject: () => void;
+  onCancel: () => void;
+}) {
+  const [item, setItem] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  
+  useEffect(() => {
+    async function loadItem() {
+      try {
+        const itemData = await Item.get(buyRequest.item_id);
+        setItem(itemData);
+      } catch (error) {
+        console.error("Error loading item:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadItem();
+  }, [buyRequest.item_id]);
+  
+  const isSeller = currentUser?.id === buyRequest.seller_id;
+  const isBuyer = currentUser?.id === buyRequest.buyer_id;
+  
+  if (loading) {
+    return <div style={{ color: "#999", fontSize: 14 }}>Loading buy request...</div>;
+  }
+  
+  return (
+    <div
+      style={{
+        border: "1px solid #dbeafe",
+        borderRadius: 12,
+        padding: 16,
+        backgroundColor: "#eff6ff",
+        marginBottom: 8,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <h4 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Buy Request</h4>
+        <span
+          style={{
+            padding: "4px 8px",
+            borderRadius: 6,
+            fontSize: 12,
+            fontWeight: 600,
+            backgroundColor:
+              buyRequest.status === "pending" ? "#fef3c7" :
+              buyRequest.status === "accepted" ? "#d1fae5" :
+              "#fee2e2",
+            color:
+              buyRequest.status === "pending" ? "#92400e" :
+              buyRequest.status === "accepted" ? "#065f46" :
+              "#991b1b",
+          }}
+        >
+          {buyRequest.status.toUpperCase()}
+        </span>
+      </div>
+      
+      {item && (
+        <div style={{ marginBottom: 12 }}>
+          <p style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px 0" }}>Item: {item.title}</p>
+          <p style={{ fontSize: 16, fontWeight: 700, color: "#dc2626", margin: 0 }}>${item.price}</p>
+        </div>
+      )}
+      
+      {buyRequest.status === "pending" && isSeller && (
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={onAccept}
+            style={{
+              flex: 1,
+              padding: "8px 16px",
+              borderRadius: 8,
+              border: "none",
+              backgroundColor: "#dc2626",
+              color: "white",
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Accept
+          </button>
+          <button
+            onClick={onReject}
+            style={{
+              flex: 1,
+              padding: "8px 16px",
+              borderRadius: 8,
+              border: "1px solid #e5e5e5",
+              backgroundColor: "#fff",
+              color: "#444",
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Reject
+          </button>
+        </div>
+      )}
+      
+      {buyRequest.status === "pending" && isBuyer && (
+        <button
+          onClick={onCancel}
+          style={{
+            padding: "6px 12px",
+            borderRadius: 8,
+            border: "1px solid #e5e5e5",
+            backgroundColor: "#fff",
+            color: "#444",
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          Cancel Request
+        </button>
+      )}
+      
+      {buyRequest.status === "accepted" && (
+        <p style={{ fontSize: 13, color: "#059669", fontWeight: 600, margin: 0 }}>
+          ✓ Request accepted! Transaction started.
+        </p>
+      )}
+      
+      {buyRequest.status === "rejected" && (
+        <p style={{ fontSize: 13, color: "#dc2626", margin: 0 }}>
+          ✗ Request declined.
+        </p>
+      )}
+    </div>
+  );
 }
 
 export default function Messages() {
@@ -27,6 +180,12 @@ export default function Messages() {
   const [newMessage, setNewMessage] = useState("");
   const wsClientRef = useRef<WebSocketClient | null>(null);
   const selectedIdRef = useRef<string | null>(null);
+  const navigate = useNavigate();
+  
+  // Buy request and transaction state
+  const [buyRequests, setBuyRequests] = useState<BuyRequestType[]>([]);
+  const [transactions, setTransactions] = useState<TransactionType[]>([]);
+  const [showTransactionList, setShowTransactionList] = useState(false);
 
   // Mock meetup details (time & place) – front-end only for now
   const [meetupTime, setMeetupTime] = useState<string | null>(null);
@@ -168,6 +327,45 @@ export default function Messages() {
                     }
                     return [...prev, newMsg];
                   });
+                } else if (data.type === "buy_request_update") {
+                  // Handle buy request updates (accept, reject, cancel, or new request)
+                  const updatedBuyRequest = data.data;
+                  
+                  // Check if this conversation exists in our list and reload if it doesn't
+                  setConversations((prevConvs) => {
+                    const conversationExists = prevConvs.some(conv => conv.id === updatedBuyRequest.conversation_id);
+                    
+                    // If conversation doesn't exist, reload conversations list (new conversation created)
+                    if (!conversationExists && currentUser?.id) {
+                      // Reload conversations to include the new one
+                      MessageEntity.getConversations(currentUser.id).then((updatedConvs) => {
+                        setConversations(updatedConvs);
+                      }).catch(console.error);
+                    }
+                    
+                    return prevConvs;
+                  });
+                  
+                  // If this is the selected conversation, reload buy requests and messages
+                  if (selectedIdRef.current && updatedBuyRequest.conversation_id === selectedIdRef.current) {
+                    BuyRequest.getByConversation(selectedIdRef.current).then((updated) => {
+                      setBuyRequests(updated);
+                    }).catch(console.error);
+                    
+                    MessageEntity.getMessages(selectedIdRef.current).then((msgs) => {
+                      setMessages(msgs ?? []);
+                    }).catch(console.error);
+                  }
+                } else if (data.type === "transaction_created" || data.type === "transaction_update") {
+                  // Handle transaction updates
+                  const updatedTransaction = data.data;
+                  
+                  // Reload transactions for the current conversation if it matches
+                  if (selectedIdRef.current && updatedTransaction.conversation_id === selectedIdRef.current) {
+                    Transaction.getAllByConversation(selectedIdRef.current).then((updated) => {
+                      setTransactions(updated);
+                    }).catch(console.error);
+                  }
                 }
               });
               wsClientRef.current = wsClient;
@@ -242,6 +440,31 @@ export default function Messages() {
     }
 
     loadMessages();
+  }, [selectedId, currentUser]);
+
+  // Load buy requests and transactions when conversation is selected
+  useEffect(() => {
+    async function loadBuyRequestsAndTransactions() {
+      if (!selectedId || !currentUser) {
+        setBuyRequests([]);
+        setTransactions([]);
+        return;
+      }
+      
+      try {
+        const [requests, txs] = await Promise.all([
+          BuyRequest.getByConversation(selectedId).catch(() => []),
+          Transaction.getAllByConversation(selectedId).catch(() => []),
+        ]);
+        
+        setBuyRequests(requests || []);
+        setTransactions(txs || []);
+      } catch (error) {
+        console.error("Error loading buy requests/transactions:", error);
+      }
+    }
+    
+    loadBuyRequestsAndTransactions();
   }, [selectedId, currentUser]);
 
   const handleSend = async () => {
@@ -474,19 +697,36 @@ export default function Messages() {
       >
         {selectedConversation ? (
           <>
-            <div style={{ marginBottom: 16 }}>
-              <h3
+            <div style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <h3
+                  style={{
+                    fontSize: 20,
+                    fontWeight: 700,
+                    marginBottom: 4,
+                  }}
+                >
+                  {selectedConversation.item_title ?? "Conversation"}
+                </h3>
+                <p style={{ color: "#666", fontSize: 14 }}>
+                  Conversation ID: {selectedConversation.id}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowTransactionList(true)}
                 style={{
-                  fontSize: 20,
-                  fontWeight: 700,
-                  marginBottom: 4,
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  border: "1px solid #dc2626",
+                  backgroundColor: "#fff",
+                  color: "#dc2626",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
                 }}
               >
-                {selectedConversation.item_title ?? "Conversation"}
-              </h3>
-              <p style={{ color: "#666", fontSize: 14 }}>
-                Conversation ID: {selectedConversation.id}
-              </p>
+                Transactions {transactions.length > 0 ? `(${transactions.length})` : ""}
+              </button>
             </div>
 
             {/* Meetup details (time & place) */}
@@ -645,35 +885,103 @@ export default function Messages() {
                   No messages yet. Say hi!
                 </div>
               )}
-              {messages.map((m) => (
-                <div
-                  key={m.id}
-                  style={{
-                    display: "flex",
-                    justifyContent:
-                      m.sender_id === currentUser.id
-                        ? "flex-end"
-                        : "flex-start",
-                  }}
-                >
+              {messages.map((m) => {
+                // Check if this is a buy request message
+                const isBuyRequestMessage = m.message_type === "buy_request" && m.buy_request_id;
+                const buyRequest = isBuyRequestMessage 
+                  ? buyRequests.find(br => br.id === m.buy_request_id)
+                  : null;
+                
+                if (isBuyRequestMessage && buyRequest) {
+                  // Render buy request message
+                  return (
+                    <BuyRequestMessageComponent
+                      key={m.id}
+                      message={m}
+                      buyRequest={buyRequest}
+                      currentUser={currentUser}
+                      onAccept={async () => {
+                        try {
+                          const result = await BuyRequest.accept(buyRequest.id!);
+                          // Reload buy requests and transactions
+                          const [updatedRequests, updatedTxs] = await Promise.all([
+                            BuyRequest.getByConversation(selectedId!),
+                            Transaction.getAllByConversation(selectedId!),
+                          ]);
+                          setBuyRequests(updatedRequests);
+                          setTransactions(updatedTxs);
+                          // Reload messages to show acceptance message
+                          const result_messages = await MessageEntity.getMessages(selectedId!);
+                          setMessages(result_messages ?? []);
+                          // Navigate to transaction page
+                          setTimeout(() => {
+                            navigate(`/transactions/${result.transaction.id}`);
+                          }, 500);
+                        } catch (error: any) {
+                          alert(error.message || "Failed to accept request");
+                        }
+                      }}
+                      onReject={async () => {
+                        try {
+                          await BuyRequest.reject(buyRequest.id!);
+                          // Reload buy requests
+                          const updated = await BuyRequest.getByConversation(selectedId!);
+                          setBuyRequests(updated);
+                          // Reload messages to show rejection message
+                          const result_messages = await MessageEntity.getMessages(selectedId!);
+                          setMessages(result_messages ?? []);
+                        } catch (error: any) {
+                          alert(error.message || "Failed to reject request");
+                        }
+                      }}
+                      onCancel={async () => {
+                        try {
+                          await BuyRequest.cancel(buyRequest.id!);
+                          // Reload buy requests
+                          const updated = await BuyRequest.getByConversation(selectedId!);
+                          setBuyRequests(updated);
+                          // Reload messages
+                          const result_messages = await MessageEntity.getMessages(selectedId!);
+                          setMessages(result_messages ?? []);
+                        } catch (error: any) {
+                          alert(error.message || "Failed to cancel request");
+                        }
+                      }}
+                    />
+                  );
+                }
+                
+                // Regular message rendering
+                return (
                   <div
+                    key={m.id}
                     style={{
-                      maxWidth: "60%",
-                      padding: "8px 10px",
-                      borderRadius: 16,
-                      backgroundColor:
-                        m.sender_id === currentUser.id
-                          ? "#dc2626"
-                          : "#e5e5e5",
-                      color:
-                        m.sender_id === currentUser.id ? "#fff" : "#111",
-                      fontSize: 14,
+                      display: "flex",
+                      justifyContent:
+                        m.sender_id === currentUser?.id
+                          ? "flex-end"
+                          : "flex-start",
                     }}
                   >
-                    {m.content}
+                    <div
+                      style={{
+                        maxWidth: "60%",
+                        padding: "8px 10px",
+                        borderRadius: 16,
+                        backgroundColor:
+                          m.sender_id === currentUser?.id
+                            ? "#dc2626"
+                            : "#e5e5e5",
+                        color:
+                          m.sender_id === currentUser?.id ? "#fff" : "#111",
+                        fontSize: 14,
+                      }}
+                    >
+                      {m.content}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Input + send */}
@@ -882,6 +1190,163 @@ export default function Messages() {
             Select a conversation from the left.
           </div>
         )}
+      </div>
+      
+      {/* Transaction List Modal */}
+      {showTransactionList && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+          onClick={() => setShowTransactionList(false)}
+        >
+          <div
+            style={{
+              backgroundColor: "white",
+              borderRadius: 12,
+              padding: 24,
+              maxWidth: 600,
+              width: "90%",
+              maxHeight: "80vh",
+              overflowY: "auto",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Transactions</h2>
+              <button
+                onClick={() => setShowTransactionList(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: 24,
+                  cursor: "pointer",
+                  color: "#666",
+                }}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {transactions.length === 0 ? (
+                <p style={{ textAlign: "center", color: "#999", padding: 20 }}>
+                  No transactions with this seller
+                </p>
+              ) : (
+                transactions.map((tx) => (
+                  <TransactionListItem
+                    key={tx.id}
+                    transaction={tx}
+                    onClose={() => setShowTransactionList(false)}
+                  />
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Transaction List Item Component
+function TransactionListItem({
+  transaction,
+  onClose,
+}: {
+  transaction: TransactionType;
+  onClose: () => void;
+}) {
+  const [item, setItem] = useState<any>(null);
+  const navigate = useNavigate();
+  
+  useEffect(() => {
+    async function loadItem() {
+      try {
+        const itemData = await Item.get(transaction.item_id);
+        setItem(itemData);
+      } catch (error) {
+        console.error("Error loading item:", error);
+      }
+    }
+    loadItem();
+  }, [transaction.item_id]);
+  
+  return (
+    <div
+      style={{
+        border: "1px solid #e5e5e5",
+        borderRadius: 8,
+        padding: 16,
+        cursor: "pointer",
+      }}
+      onClick={() => {
+        navigate(`/transactions/${transaction.id}`);
+        onClose();
+      }}
+    >
+      <div style={{ display: "flex", gap: 12 }}>
+        {item?.images?.[0] && (
+          <img
+            src={item.images[0]}
+            alt={item.title}
+            style={{
+              width: 80,
+              height: 80,
+              objectFit: "cover",
+              borderRadius: 8,
+            }}
+          />
+        )}
+        <div style={{ flex: 1 }}>
+          <h4 style={{ fontSize: 16, fontWeight: 600, margin: "0 0 4px 0" }}>
+            {item?.title || "Loading..."}
+          </h4>
+          <p style={{ fontSize: 14, color: "#666", margin: "0 0 8px 0" }}>
+            ${item?.price || "—"}
+          </p>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span
+              style={{
+                padding: "4px 8px",
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 600,
+                backgroundColor:
+                  transaction.status === "completed" ? "#d1fae5" :
+                  transaction.status === "cancelled" ? "#fee2e2" :
+                  "#fef3c7",
+                color:
+                  transaction.status === "completed" ? "#065f46" :
+                  transaction.status === "cancelled" ? "#991b1b" :
+                  "#92400e",
+              }}
+            >
+              {transaction.status}
+            </span>
+            {transaction.status === "in_progress" && (
+              <span style={{ fontSize: 12, color: "#666" }}>
+                {transaction.buyer_confirmed && transaction.seller_confirmed
+                  ? "Both confirmed"
+                  : transaction.buyer_confirmed
+                  ? "Buyer confirmed"
+                  : transaction.seller_confirmed
+                  ? "Seller confirmed"
+                  : "Pending confirmation"}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -10,6 +10,8 @@ from models.item import ItemDB
 from models.user import UserDB
 from models.conversation import ConversationDB
 from models.message import MessageDB
+from models.buy_request import BuyRequestDB
+from models.transaction import TransactionDB
 import uuid
 from datetime import datetime
 import os
@@ -153,9 +155,68 @@ class MessageResponse(BaseModel):
     content: str
     is_read: bool
     created_date: str
+    message_type: Optional[str] = "text"
+    buy_request_id: Optional[str] = None
 
 class MessageUpdate(BaseModel):
     is_read: Optional[bool] = None
+
+
+# BuyRequest Pydantic models
+class BuyRequestCreate(BaseModel):
+    item_id: str
+    conversation_id: Optional[str] = None  # Will create if not provided
+
+class BuyRequestResponse(BaseModel):
+    id: str
+    item_id: str
+    buyer_id: str
+    seller_id: str
+    conversation_id: str
+    status: str
+    created_date: str
+    responded_date: Optional[str] = None
+
+class BuyRequestUpdate(BaseModel):
+    status: str  # "accepted", "rejected", "cancelled"
+
+# Transaction Pydantic models
+class TransactionCreate(BaseModel):
+    item_id: str
+    conversation_id: str
+    buyer_id: str
+    seller_id: str
+    buy_request_id: Optional[str] = None
+
+class TransactionResponse(BaseModel):
+    id: str
+    item_id: str
+    buyer_id: str
+    seller_id: str
+    conversation_id: str
+    buy_request_id: Optional[str]
+    status: str
+    buyer_confirmed: bool
+    seller_confirmed: bool
+    buyer_cancel_confirmed: bool
+    seller_cancel_confirmed: bool
+    meetup_time: Optional[str] = None
+    meetup_place: Optional[str] = None
+    meetup_lat: Optional[float] = None
+    meetup_lng: Optional[float] = None
+    created_date: str
+    completed_date: Optional[str] = None
+
+class TransactionUpdate(BaseModel):
+    buyer_confirmed: Optional[bool] = None
+    seller_confirmed: Optional[bool] = None
+    buyer_cancel_confirmed: Optional[bool] = None
+    seller_cancel_confirmed: Optional[bool] = None
+    meetup_time: Optional[str] = None
+    meetup_place: Optional[str] = None
+    meetup_lat: Optional[float] = None
+    meetup_lng: Optional[float] = None
+    status: Optional[str] = None
 
 
 # ============================
@@ -235,9 +296,18 @@ def conversation_to_response(
     }
 
 
+def pydantic_to_dict(model) -> dict:
+    """Convert Pydantic model to dictionary (supports both v1 and v2)"""
+    if hasattr(model, 'dict'):
+        return model.dict()
+    elif hasattr(model, 'model_dump'):
+        return model.model_dump()
+    else:
+        return dict(model)
+
 def message_to_response(message: MessageDB) -> dict:
     """Convert MessageDB to response dictionary"""
-    return {
+    result = {
         "id": message.id,
         "conversation_id": message.conversation_id,
         "sender_id": message.sender_id,
@@ -245,6 +315,45 @@ def message_to_response(message: MessageDB) -> dict:
         "is_read": message.is_read,
         "created_date": message.created_date.isoformat() if message.created_date else datetime.now().isoformat(),
     }
+    # Add optional fields if they exist
+    if hasattr(message, "message_type"):
+        result["message_type"] = message.message_type or "text"
+    if hasattr(message, "buy_request_id"):
+        result["buy_request_id"] = message.buy_request_id
+    return result
+
+def buy_request_to_response(buy_request: BuyRequestDB) -> BuyRequestResponse:
+    return BuyRequestResponse(
+        id=buy_request.id,
+        item_id=buy_request.item_id,
+        buyer_id=buy_request.buyer_id,
+        seller_id=buy_request.seller_id,
+        conversation_id=buy_request.conversation_id,
+        status=buy_request.status,
+        created_date=buy_request.created_date.isoformat() if buy_request.created_date else datetime.now().isoformat(),
+        responded_date=buy_request.responded_date.isoformat() if buy_request.responded_date else None,
+    )
+
+def transaction_to_response(transaction: TransactionDB) -> TransactionResponse:
+    return TransactionResponse(
+        id=transaction.id,
+        item_id=transaction.item_id,
+        buyer_id=transaction.buyer_id,
+        seller_id=transaction.seller_id,
+        conversation_id=transaction.conversation_id,
+        buy_request_id=transaction.buy_request_id,
+        status=transaction.status,
+        buyer_confirmed=transaction.buyer_confirmed,
+        seller_confirmed=transaction.seller_confirmed,
+        buyer_cancel_confirmed=transaction.buyer_cancel_confirmed if hasattr(transaction, 'buyer_cancel_confirmed') else False,
+        seller_cancel_confirmed=transaction.seller_cancel_confirmed if hasattr(transaction, 'seller_cancel_confirmed') else False,
+        meetup_time=transaction.meetup_time.isoformat() if transaction.meetup_time else None,
+        meetup_place=transaction.meetup_place,
+        meetup_lat=transaction.meetup_lat,
+        meetup_lng=transaction.meetup_lng,
+        created_date=transaction.created_date.isoformat() if transaction.created_date else datetime.now().isoformat(),
+        completed_date=transaction.completed_date.isoformat() if transaction.completed_date else None,
+    )
 
 
 def validate_bu_email(email: str) -> bool:
@@ -700,11 +809,15 @@ class ConnectionManager:
     async def send_personal_message(self, message: dict, user_id: str):
         """Send message to a specific user's WebSocket connections"""
         if user_id in self.active_connections:
+            logger.info(f"Sending message type '{message.get('type', 'unknown')}' to user {user_id}, {len(self.active_connections[user_id])} connection(s)")
             for connection in self.active_connections[user_id]:
                 try:
                     await connection.send_json(message)
-                except:
-                    pass  # Connection closed, skip it
+                    logger.info(f"Successfully sent message to user {user_id}")
+                except Exception as e:
+                    logger.error(f"Failed to send message to user {user_id}: {e}")
+        else:
+            logger.warning(f"User {user_id} has no active WebSocket connections - message type: {message.get('type', 'unknown')}")
     
     async def broadcast_to_conversation(self, message: dict, conversation_id: str, sender_id: str, db: Session):
         """Send message to all participants in a conversation (except sender)"""
@@ -719,6 +832,26 @@ class ConnectionManager:
         for participant_id in participants:
             if participant_id != sender_id:
                 await self.send_personal_message(message, participant_id)
+    
+    async def broadcast_to_transaction(self, message: dict, transaction_id: str, sender_id: str, db: Session):
+        """Send message to both buyer and seller of a transaction (except sender)"""
+        from models.transaction import TransactionDB
+        transaction = db.query(TransactionDB).filter(TransactionDB.id == transaction_id).first()
+        if not transaction:
+            logger.warning(f"Transaction {transaction_id} not found for broadcast")
+            return
+        
+        participants = [transaction.buyer_id, transaction.seller_id]
+        
+        logger.info(f"Broadcasting transaction update to participants: {participants}, sender: {sender_id}")
+        
+        # Send to both participants except sender
+        for participant_id in participants:
+            if participant_id != sender_id:
+                logger.info(f"Sending transaction update to user {participant_id}")
+                await self.send_personal_message(message, participant_id)
+            else:
+                logger.info(f"Skipping sender {sender_id}")
 
 # Create global connection manager instance
 manager = ConnectionManager()
@@ -1164,3 +1297,630 @@ def delete_message(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to delete message: {str(e)}")
+
+# ============================
+# BuyRequest Endpoints
+# ============================
+
+@app.post("/api/buy-requests", response_model=BuyRequestResponse)
+async def create_buy_request(
+    request_data: BuyRequestCreate,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Create a buy request for an item. Creates conversation if it doesn't exist."""
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    
+    item = db.query(ItemDB).filter(ItemDB.id == request_data.item_id).first()
+    if not item:
+        raise HTTPException(404, "Item not found")
+    
+    if item.seller_id == user.id:
+        raise HTTPException(status_code=400, detail="You cannot request to buy your own item")
+    
+    if item.status != "available":
+        raise HTTPException(status_code=400, detail=f"Item is {item.status} and cannot be requested")
+    
+    existing = db.query(BuyRequestDB).filter(
+        BuyRequestDB.item_id == request_data.item_id,
+        BuyRequestDB.buyer_id == user.id,
+        BuyRequestDB.status.in_(["pending", "accepted"])
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="You already have a pending or accepted request for this item")
+    
+    try:
+        conversation_id = request_data.conversation_id
+        if not conversation_id:
+            existing_conv = db.query(ConversationDB).filter(
+                ((ConversationDB.participant1_id == user.id) & (ConversationDB.participant2_id == item.seller_id)) |
+                ((ConversationDB.participant1_id == item.seller_id) & (ConversationDB.participant2_id == user.id))
+            ).first()
+            
+            if existing_conv:
+                conversation_id = existing_conv.id
+            else:
+                new_conv = ConversationDB(
+                    id=str(uuid.uuid4()),
+                    participant1_id=user.id,
+                    participant2_id=item.seller_id,
+                    item_id=item.id,
+                )
+                db.add(new_conv)
+                db.flush()
+                conversation_id = new_conv.id
+        
+        buy_request = BuyRequestDB(
+            id=str(uuid.uuid4()),
+            item_id=item.id,
+            buyer_id=user.id,
+            seller_id=item.seller_id,
+            conversation_id=conversation_id,
+            status="pending"
+        )
+        db.add(buy_request)
+        db.flush()
+        
+        buy_request_message = MessageDB(
+            id=str(uuid.uuid4()),
+            conversation_id=conversation_id,
+            sender_id=user.id,
+            content=f"Buy request for: {item.title}",
+            message_type="buy_request",
+            buy_request_id=buy_request.id,
+            is_read=False
+        )
+        db.add(buy_request_message)
+        
+        conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
+        if conversation:
+            conversation.last_message_at = datetime.now()
+        
+        db.commit()
+        db.refresh(buy_request)
+        db.refresh(buy_request_message)
+        
+        # Broadcast buy request update and new message via WebSocket
+        buy_request_response = buy_request_to_response(buy_request)
+        message_response = message_to_response(buy_request_message)
+        
+        # Broadcast buy request update to conversation participants
+        await manager.broadcast_to_conversation(
+            {
+                "type": "buy_request_update",
+                "data": pydantic_to_dict(buy_request_response)
+            },
+            conversation_id,
+            user.id,
+            db
+        )
+        
+        # Broadcast new message to conversation participants
+        await manager.broadcast_to_conversation(
+            {
+                "type": "new_message",
+                "data": message_response
+            },
+            conversation_id,
+            user.id,
+            db
+        )
+        
+        return buy_request_response
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating buy request: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create buy request: {str(e)}")
+
+@app.patch("/api/buy-requests/{request_id}/accept")
+async def accept_buy_request(
+    request_id: str,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Accept a buy request and automatically create a transaction."""
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    
+    buy_request = db.query(BuyRequestDB).filter(BuyRequestDB.id == request_id).first()
+    if not buy_request:
+        raise HTTPException(404, "Buy request not found")
+    
+    if buy_request.seller_id != user.id:
+        raise HTTPException(status_code=403, detail="Only the seller can accept buy requests")
+    
+    if buy_request.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Buy request is already {buy_request.status}")
+    
+    item = db.query(ItemDB).filter(ItemDB.id == buy_request.item_id).first()
+    if not item:
+        raise HTTPException(404, "Item not found")
+    
+    if item.status != "available":
+        raise HTTPException(status_code=400, detail=f"Item is {item.status} and cannot be purchased")
+    
+    existing_transaction = db.query(TransactionDB).filter(
+        TransactionDB.item_id == buy_request.item_id,
+        TransactionDB.status == "in_progress"
+    ).first()
+    
+    if existing_transaction:
+        raise HTTPException(status_code=400, detail="Item already has an in-progress transaction")
+    
+    try:
+        buy_request.status = "accepted"
+        buy_request.responded_date = datetime.now()
+        
+        other_requests = db.query(BuyRequestDB).filter(
+            BuyRequestDB.item_id == buy_request.item_id,
+            BuyRequestDB.status == "pending",
+            BuyRequestDB.id != buy_request.id
+        ).all()
+        
+        for req in other_requests:
+            req.status = "rejected"
+            req.responded_date = datetime.now()
+        
+        transaction = TransactionDB(
+            id=str(uuid.uuid4()),
+            item_id=buy_request.item_id,
+            buyer_id=buy_request.buyer_id,
+            seller_id=buy_request.seller_id,
+            conversation_id=buy_request.conversation_id,
+            buy_request_id=buy_request.id,
+            status="in_progress",
+            buyer_confirmed=False,
+            seller_confirmed=False,
+        )
+        db.add(transaction)
+        item.status = "reserved"
+        
+        acceptance_message = MessageDB(
+            id=str(uuid.uuid4()),
+            conversation_id=buy_request.conversation_id,
+            sender_id=user.id,
+            content="Buy request accepted! Transaction started.",
+            message_type="text",
+            is_read=False
+        )
+        db.add(acceptance_message)
+        
+        conversation = db.query(ConversationDB).filter(ConversationDB.id == buy_request.conversation_id).first()
+        if conversation:
+            conversation.last_message_at = datetime.now()
+        
+        db.commit()
+        db.refresh(buy_request)
+        db.refresh(transaction)
+        
+        # Broadcast buy request update and new transaction via WebSocket
+        buy_request_response = buy_request_to_response(buy_request)
+        transaction_response = transaction_to_response(transaction)
+        
+        # Broadcast to conversation participants (buy request update)
+        await manager.broadcast_to_conversation(
+            {
+                "type": "buy_request_update",
+                "data": pydantic_to_dict(buy_request_response)
+            },
+            buy_request.conversation_id,
+            user.id,
+            db
+        )
+        
+        # Broadcast to transaction participants (new transaction created)
+        await manager.broadcast_to_transaction(
+            {
+                "type": "transaction_created",
+                "data": pydantic_to_dict(transaction_response)
+            },
+            transaction.id,
+            user.id,
+            db
+        )
+        
+        return {
+            "buy_request": buy_request_response,
+            "transaction": transaction_response
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error accepting buy request: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to accept buy request: {str(e)}")
+
+@app.patch("/api/buy-requests/{request_id}/reject", response_model=BuyRequestResponse)
+async def reject_buy_request(
+    request_id: str,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Reject a buy request."""
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    
+    buy_request = db.query(BuyRequestDB).filter(BuyRequestDB.id == request_id).first()
+    if not buy_request:
+        raise HTTPException(404, "Buy request not found")
+    
+    if buy_request.seller_id != user.id:
+        raise HTTPException(status_code=403, detail="Only the seller can reject buy requests")
+    
+    if buy_request.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Buy request is already {buy_request.status}")
+    
+    try:
+        buy_request.status = "rejected"
+        buy_request.responded_date = datetime.now()
+        
+        rejection_message = MessageDB(
+            id=str(uuid.uuid4()),
+            conversation_id=buy_request.conversation_id,
+            sender_id=user.id,
+            content="Buy request declined.",
+            message_type="text",
+            is_read=False
+        )
+        db.add(rejection_message)
+        
+        conversation = db.query(ConversationDB).filter(ConversationDB.id == buy_request.conversation_id).first()
+        if conversation:
+            conversation.last_message_at = datetime.now()
+        
+        db.commit()
+        db.refresh(buy_request)
+        
+        # Broadcast buy request update via WebSocket
+        buy_request_response = buy_request_to_response(buy_request)
+        await manager.broadcast_to_conversation(
+            {
+                "type": "buy_request_update",
+                "data": pydantic_to_dict(buy_request_response)
+            },
+            buy_request.conversation_id,
+            user.id,
+            db
+        )
+        
+        return buy_request_response
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to reject buy request: {str(e)}")
+
+@app.patch("/api/buy-requests/{request_id}/cancel", response_model=BuyRequestResponse)
+async def cancel_buy_request(
+    request_id: str,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Cancel a buy request (buyer only)."""
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    
+    buy_request = db.query(BuyRequestDB).filter(BuyRequestDB.id == request_id).first()
+    if not buy_request:
+        raise HTTPException(404, "Buy request not found")
+    
+    if buy_request.buyer_id != user.id:
+        raise HTTPException(status_code=403, detail="Only the buyer can cancel buy requests")
+    
+    if buy_request.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Cannot cancel a {buy_request.status} request")
+    
+    try:
+        buy_request.status = "cancelled"
+        buy_request.responded_date = datetime.now()
+        db.commit()
+        db.refresh(buy_request)
+        
+        # Broadcast buy request update via WebSocket
+        buy_request_response = buy_request_to_response(buy_request)
+        await manager.broadcast_to_conversation(
+            {
+                "type": "buy_request_update",
+                "data": pydantic_to_dict(buy_request_response)
+            },
+            buy_request.conversation_id,
+            user.id,
+            db
+        )
+        
+        return buy_request_response
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to cancel buy request: {str(e)}")
+
+@app.get("/api/buy-requests/by-conversation/{conversation_id}", response_model=List[BuyRequestResponse])
+def get_buy_requests_by_conversation(
+    conversation_id: str,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Get all buy requests for a conversation."""
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    
+    conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
+    if not conversation:
+        raise HTTPException(404, "Conversation not found")
+    
+    if user.id not in [conversation.participant1_id, conversation.participant2_id]:
+        raise HTTPException(status_code=403, detail="You can only view buy requests for your own conversations")
+    
+    requests = db.query(BuyRequestDB).filter(
+        BuyRequestDB.conversation_id == conversation_id
+    ).order_by(BuyRequestDB.created_date.desc()).all()
+    
+    return [buy_request_to_response(req) for req in requests]
+
+@app.get("/api/buy-requests/{request_id}", response_model=BuyRequestResponse)
+def get_buy_request(
+    request_id: str,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Get a specific buy request."""
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    
+    buy_request = db.query(BuyRequestDB).filter(BuyRequestDB.id == request_id).first()
+    if not buy_request:
+        raise HTTPException(404, "Buy request not found")
+    
+    if user.id not in [buy_request.buyer_id, buy_request.seller_id]:
+        raise HTTPException(status_code=403, detail="You can only view your own buy requests")
+    
+    return buy_request_to_response(buy_request)
+
+# ============================
+# Transaction Endpoints
+# ============================
+
+@app.get("/api/transactions/{transaction_id}", response_model=TransactionResponse)
+def get_transaction(
+    transaction_id: str,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Get a specific transaction."""
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    
+    transaction = db.query(TransactionDB).filter(TransactionDB.id == transaction_id).first()
+    if not transaction:
+        raise HTTPException(404, "Transaction not found")
+    
+    if user.id not in [transaction.buyer_id, transaction.seller_id]:
+        raise HTTPException(status_code=403, detail="You can only view your own transactions")
+    
+    return transaction_to_response(transaction)
+
+@app.get("/api/transactions/by-conversation/{conversation_id}/all", response_model=List[TransactionResponse])
+def get_all_transactions_by_conversation(
+    conversation_id: str,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Get all transactions for a conversation."""
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    
+    conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
+    if not conversation:
+        raise HTTPException(404, "Conversation not found")
+    
+    if user.id not in [conversation.participant1_id, conversation.participant2_id]:
+        raise HTTPException(status_code=403, detail="You can only view transactions for your own conversations")
+    
+    transactions = db.query(TransactionDB).filter(
+        TransactionDB.conversation_id == conversation_id
+    ).order_by(TransactionDB.created_date.desc()).all()
+    
+    return [transaction_to_response(t) for t in transactions]
+
+@app.patch("/api/transactions/{transaction_id}", response_model=TransactionResponse)
+async def update_transaction(
+    transaction_id: str,
+    update_data: TransactionUpdate,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Update a transaction (confirmations, meetup details)."""
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    
+    transaction = db.query(TransactionDB).filter(TransactionDB.id == transaction_id).first()
+    if not transaction:
+        raise HTTPException(404, "Transaction not found")
+    
+    if user.id not in [transaction.buyer_id, transaction.seller_id]:
+        raise HTTPException(status_code=403, detail="You can only update your own transactions")
+    
+    if transaction.status in ["completed", "cancelled"]:
+        raise HTTPException(status_code=400, detail=f"Cannot modify a {transaction.status} transaction")
+    
+    try:
+        if update_data.buyer_confirmed is not None:
+            if transaction.buyer_id != user.id:
+                raise HTTPException(status_code=403, detail="Only the buyer can set buyer_confirmed")
+            transaction.buyer_confirmed = update_data.buyer_confirmed
+        
+        if update_data.seller_confirmed is not None:
+            if transaction.seller_id != user.id:
+                raise HTTPException(status_code=403, detail="Only the seller can set seller_confirmed")
+            transaction.seller_confirmed = update_data.seller_confirmed
+        
+        if update_data.buyer_cancel_confirmed is not None:
+            if transaction.buyer_id != user.id:
+                raise HTTPException(status_code=403, detail="Only the buyer can set buyer_cancel_confirmed")
+            transaction.buyer_cancel_confirmed = update_data.buyer_cancel_confirmed
+        
+        if update_data.seller_cancel_confirmed is not None:
+            if transaction.seller_id != user.id:
+                raise HTTPException(status_code=403, detail="Only the seller can set seller_cancel_confirmed")
+            transaction.seller_cancel_confirmed = update_data.seller_cancel_confirmed
+        
+        if update_data.meetup_time is not None:
+            if update_data.meetup_time:
+                transaction.meetup_time = datetime.fromisoformat(update_data.meetup_time.replace('Z', '+00:00'))
+            else:
+                transaction.meetup_time = None
+        
+        if update_data.meetup_place is not None:
+            transaction.meetup_place = update_data.meetup_place
+        
+        if update_data.meetup_lat is not None:
+            transaction.meetup_lat = update_data.meetup_lat
+        
+        if update_data.meetup_lng is not None:
+            transaction.meetup_lng = update_data.meetup_lng
+        
+        # Check if both parties confirmed completion
+        if transaction.buyer_confirmed and transaction.seller_confirmed and transaction.status == "in_progress":
+            transaction.status = "completed"
+            transaction.completed_date = datetime.now()
+            
+            item = db.query(ItemDB).filter(ItemDB.id == transaction.item_id).first()
+            if item:
+                item.status = "sold"
+            
+            seller = db.query(UserDB).filter(UserDB.id == transaction.seller_id).first()
+            if seller:
+                seller.total_sales += 1
+        
+        # Check if both parties confirmed cancellation
+        if transaction.buyer_cancel_confirmed and transaction.seller_cancel_confirmed and transaction.status == "in_progress":
+            transaction.status = "cancelled"
+            transaction.completed_date = datetime.now()
+            
+            item = db.query(ItemDB).filter(ItemDB.id == transaction.item_id).first()
+            if item and item.status == "reserved":
+                item.status = "available"
+            
+            # Also cancel the associated buy request(s) so buyer can request again
+            # First, try to cancel the buy request linked to this transaction
+            if transaction.buy_request_id:
+                buy_request = db.query(BuyRequestDB).filter(BuyRequestDB.id == transaction.buy_request_id).first()
+                if buy_request and buy_request.status == "accepted":
+                    buy_request.status = "cancelled"
+                    buy_request.responded_date = datetime.now()
+            
+            # Also cancel any other accepted buy requests for this item and buyer (safety check)
+            accepted_requests = db.query(BuyRequestDB).filter(
+                BuyRequestDB.item_id == transaction.item_id,
+                BuyRequestDB.buyer_id == transaction.buyer_id,
+                BuyRequestDB.status == "accepted"
+            ).all()
+            for req in accepted_requests:
+                if req.id != transaction.buy_request_id:  # Don't double-update the one above
+                    req.status = "cancelled"
+                    req.responded_date = datetime.now()
+        
+        db.commit()
+        db.refresh(transaction)
+        
+        # Broadcast transaction update via WebSocket to both buyer and seller
+        transaction_response = transaction_to_response(transaction)
+        await manager.broadcast_to_transaction(
+            {
+                "type": "transaction_update",
+                "data": pydantic_to_dict(transaction_response)
+            },
+            transaction_id,
+            user.id,
+            db
+        )
+        
+        return transaction_response
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating transaction: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update transaction: {str(e)}")
+
+@app.patch("/api/transactions/{transaction_id}/cancel", response_model=TransactionResponse)
+async def cancel_transaction(
+    transaction_id: str,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Cancel a transaction."""
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    
+    transaction = db.query(TransactionDB).filter(TransactionDB.id == transaction_id).first()
+    if not transaction:
+        raise HTTPException(404, "Transaction not found")
+    
+    if user.id not in [transaction.buyer_id, transaction.seller_id]:
+        raise HTTPException(status_code=403, detail="You can only cancel your own transactions")
+    
+    if transaction.status == "completed":
+        raise HTTPException(status_code=400, detail="Cannot cancel a completed transaction")
+    
+    try:
+        transaction.status = "cancelled"
+        transaction.completed_date = datetime.now()
+        
+        item = db.query(ItemDB).filter(ItemDB.id == transaction.item_id).first()
+        if item and item.status == "reserved":
+            item.status = "available"
+        
+        # Also cancel the associated buy request(s) so buyer can request again
+        # First, try to cancel the buy request linked to this transaction
+        if transaction.buy_request_id:
+            buy_request = db.query(BuyRequestDB).filter(BuyRequestDB.id == transaction.buy_request_id).first()
+            if buy_request and buy_request.status == "accepted":
+                buy_request.status = "cancelled"
+                buy_request.responded_date = datetime.now()
+        
+        # Also cancel any other accepted buy requests for this item and buyer (safety check)
+        accepted_requests = db.query(BuyRequestDB).filter(
+            BuyRequestDB.item_id == transaction.item_id,
+            BuyRequestDB.buyer_id == transaction.buyer_id,
+            BuyRequestDB.status == "accepted"
+        ).all()
+        for req in accepted_requests:
+            if req.id != transaction.buy_request_id:  # Don't double-update the one above
+                req.status = "cancelled"
+                req.responded_date = datetime.now()
+        
+        db.commit()
+        db.refresh(transaction)
+        
+        # Broadcast transaction update via WebSocket
+        transaction_response = transaction_to_response(transaction)
+        await manager.broadcast_to_transaction(
+            {
+                "type": "transaction_update",
+                "data": pydantic_to_dict(transaction_response)
+            },
+            transaction_id,
+            user.id,
+            db
+        )
+        
+        return transaction_response
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to cancel transaction: {str(e)}")

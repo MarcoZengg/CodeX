@@ -12,4 +12,5 @@ export default [
   route("register", "routes/register.tsx"),
   route("login", "routes/login.tsx"),
   route("complete-profile", "routes/complete-profile.tsx"),
+  route("transactions/:id", "routes/transactions.$id.tsx"),
 ] satisfies RouteConfig;

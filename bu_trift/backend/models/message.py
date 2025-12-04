@@ -11,6 +11,11 @@ class MessageDB(Base):
     sender_id = Column(String, nullable=False, index=True)  # User who sent the message
     content = Column(String, nullable=False)  # Message text
     is_read = Column(Boolean, default=False)  # Read status
+    
+    # NEW: Support for buy request messages
+    message_type = Column(String, default="text")  # "text" or "buy_request"
+    buy_request_id = Column(String, ForeignKey("buy_requests.id"), nullable=True, index=True)
+    
     created_date = Column(DateTime, server_default=func.now())
     
     # Relationship: message belongs to one conversation

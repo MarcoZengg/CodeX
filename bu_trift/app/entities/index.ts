@@ -3,12 +3,16 @@ import type { Item as ItemType, ItemCategory, ItemCondition, ItemStatus } from "
 import type { Message as MessageType } from "./Message";
 import type { Conversation as ConversationType } from "./Conversation";
 import type { User as UserType, UserRegister, UserLogin } from "./User";
+import type { BuyRequest as BuyRequestType } from "./BuyRequest";
+import type { Transaction as TransactionType } from "./Transaction";
 
 // Import entity classes for re-export
 import { ItemEntity } from "./Item";
 import { MessageEntity } from "./Message";
 import { ConversationEntity } from "./Conversation";
 import { UserEntity } from "./User";
+import { BuyRequestEntity } from "./BuyRequest";
+import { TransactionEntity } from "./Transaction";
 
 // Note: For type imports, import directly from the source files:
 // import type { Item } from "@/entities/Item";
@@ -19,6 +23,8 @@ export { ItemEntity };
 export { MessageEntity };
 export { ConversationEntity };
 export { UserEntity };
+export { BuyRequestEntity };
+export { TransactionEntity };
 
 // Create runtime objects with different internal names to avoid type/value conflicts
 const ItemService = {
@@ -64,9 +70,37 @@ const UserService = {
     UserEntity.update(payload as any),
 };
 
+const BuyRequestService = {
+  create: async (item_id: string, conversation_id?: string): Promise<BuyRequestType> =>
+    BuyRequestEntity.create(item_id, conversation_id),
+  accept: async (request_id: string): Promise<{ buy_request: BuyRequestType; transaction: TransactionType }> =>
+    BuyRequestEntity.accept(request_id),
+  reject: async (request_id: string): Promise<BuyRequestType> =>
+    BuyRequestEntity.reject(request_id),
+  cancel: async (request_id: string): Promise<BuyRequestType> =>
+    BuyRequestEntity.cancel(request_id),
+  getByConversation: async (conversation_id: string): Promise<BuyRequestType[]> =>
+    BuyRequestEntity.getByConversation(conversation_id),
+  get: async (id: string): Promise<BuyRequestType> =>
+    BuyRequestEntity.get(id),
+};
+
+const TransactionService = {
+  get: async (id: string): Promise<TransactionType> =>
+    TransactionEntity.get(id),
+  getAllByConversation: async (conversation_id: string): Promise<TransactionType[]> =>
+    TransactionEntity.getAllByConversation(conversation_id),
+  update: async (id: string, data: Partial<TransactionType>): Promise<TransactionType> =>
+    TransactionEntity.update(id, data),
+  cancel: async (id: string): Promise<TransactionType> =>
+    TransactionEntity.cancel(id),
+};
+
 // Export runtime objects as values (this is a value export, not a type)
 // TypeScript will distinguish between: import { Item } (value) vs import type { Item } (type)
 export { ItemService as Item };
 export { MessageService as Message };
 export { ConversationService as Conversation };
 export { UserService as User };
+export { BuyRequestService as BuyRequest };
+export { TransactionService as Transaction };
