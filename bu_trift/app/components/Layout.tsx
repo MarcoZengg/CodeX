@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router";
 import { createPageUrl } from "@/utils";
-import { Home, Search, Plus, User, MessageCircle, LogIn, UserPlus, LogOut } from "lucide-react";
+import { Home, Search, Plus, User, MessageCircle, LogIn, UserPlus, LogOut, Menu, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { User as UserType } from "@/entities/User";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,7 @@ interface LayoutProps {
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const [currentUser, setCurrentUser] = useState<UserType | null>(null);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   // Set up Firebase token refresh on mount
   useEffect(() => {
@@ -79,6 +80,8 @@ export default function Layout({ children }: LayoutProps) {
     window.addEventListener("storage", handleStorageChange);
     // Also check on location change (for same-tab navigation)
     handleStorageChange();
+    // Close mobile nav on route change
+    setIsMobileNavOpen(false);
 
     return () => {
       window.removeEventListener("storage", handleStorageChange);
@@ -134,8 +137,18 @@ export default function Layout({ children }: LayoutProps) {
           {currentUser ? (
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-red-100 to-red-200 rounded-full flex items-center justify-center border-2 border-red-300/20">
-                  <User className="w-5 h-5 text-red-700" />
+                <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-red-300/40 bg-neutral-100 flex items-center justify-center">
+                  {currentUser.profile_image_url ? (
+                    <img
+                      src={currentUser.profile_image_url}
+                      alt={currentUser.display_name || "Profile"}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-red-700 font-semibold">
+                      {(currentUser.display_name || "B")[0]}
+                    </span>
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-neutral-900 text-sm truncate">
@@ -186,13 +199,21 @@ export default function Layout({ children }: LayoutProps) {
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile header */}
         <header className="bg-white/90 backdrop-blur-md border-b border-neutral-200/60 px-6 py-4 md:hidden">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-gradient-to-br from-red-600 to-red-700 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-sm">BU</span>
               </div>
               <h1 className="text-lg font-bold text-neutral-900">BUTrift</h1>
             </div>
+            <Button
+              variant="outline"
+              size="icon"
+              className="border-neutral-200 text-neutral-700"
+              onClick={() => setIsMobileNavOpen((prev) => !prev)}
+            >
+              {isMobileNavOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </Button>
           </div>
         </header>
 
@@ -200,7 +221,93 @@ export default function Layout({ children }: LayoutProps) {
           {children}
         </div>
       </main>
+
+      {/* Mobile nav drawer */}
+      <div
+        className={`fixed inset-0 z-50 md:hidden transition-opacity ${isMobileNavOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
+      >
+        <div
+          className="absolute inset-0 bg-black/40"
+          onClick={() => setIsMobileNavOpen(false)}
+        />
+        <div className={`absolute right-0 top-0 h-full w-72 bg-white shadow-2xl transform transition-transform ${isMobileNavOpen ? "translate-x-0" : "translate-x-full"}`}>
+          <div className="p-6 border-b border-neutral-200 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-red-300/40 bg-neutral-100 flex items-center justify-center">
+                {currentUser?.profile_image_url ? (
+                  <img
+                    src={currentUser.profile_image_url}
+                    alt={currentUser.display_name || "Profile"}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-red-700 font-semibold">
+                    {(currentUser?.display_name || "B")[0]}
+                  </span>
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold text-neutral-900 text-sm truncate">
+                  {currentUser?.display_name || "BU Student"}
+                </p>
+                <p className="text-xs text-neutral-600 truncate">
+                  {currentUser?.email || "Verified @bu.edu"}
+                </p>
+              </div>
+            </div>
+            <Button variant="ghost" size="icon" onClick={() => setIsMobileNavOpen(false)}>
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
+          <nav className="p-4 space-y-2">
+            {navigationItems.map((item) => (
+              <Link
+                key={item.title}
+                to={item.url}
+                className={`flex items-center gap-3 rounded-xl py-3 px-4 transition-all duration-300 ${
+                  location.pathname === item.url
+                    ? "bg-gradient-to-r from-red-600 to-red-700 text-white shadow-md"
+                    : "text-neutral-700 hover:bg-red-50 hover:text-red-700"
+                }`}
+                onClick={() => setIsMobileNavOpen(false)}
+              >
+                <item.icon className="w-5 h-5" />
+                <span className="font-semibold">{item.title}</span>
+              </Link>
+            ))}
+          </nav>
+          <div className="p-4 border-t border-neutral-200 space-y-2">
+            {currentUser ? (
+              <Button
+                onClick={handleLogout}
+                variant="outline"
+                className="w-full border-red-200 text-red-700 hover:bg-red-50"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Logout
+              </Button>
+            ) : (
+              <>
+                <Link to={createPageUrl("Login")} onClick={() => setIsMobileNavOpen(false)}>
+                  <Button className="w-full mb-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white">
+                    <LogIn className="w-4 h-4 mr-2" />
+                    Sign In
+                  </Button>
+                </Link>
+                <Link to={createPageUrl("Register")} onClick={() => setIsMobileNavOpen(false)}>
+                  <Button
+                    variant="outline"
+                    className="w-full border-red-200 text-red-700 hover:bg-red-50"
+                  >
+                    <UserPlus className="w-4 h-4 mr-2" />
+                    Create Account
+                  </Button>
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
-

@@ -170,7 +170,7 @@ export default function Items() {
         </div>
 
         {/* Items Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
           <AnimatePresence>
             {isLoading ? (
               Array(12).fill(0).map((_, i) => (
@@ -247,4 +247,3 @@ export default function Items() {
     </div>
   );
 }
-

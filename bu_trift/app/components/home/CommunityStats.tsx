@@ -23,7 +23,7 @@ export default function CommunityStats() {
         </p>
       </motion.div>
 
-      <div className="grid md:grid-cols-4 gap-8">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 md:grid-cols-4">
         {stats.map((stat, index) => (
           <motion.div
             key={stat.label}
@@ -32,7 +32,7 @@ export default function CommunityStats() {
             transition={{ duration: 0.6, delay: 0.7 + index * 0.1 }}
             className="text-center"
           >
-            <div className="w-16 h-16 bg-gradient-to-br from-white to-neutral-50 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg border border-neutral-200/60">
+            <div className="w-20 h-20 bg-gradient-to-br from-white to-neutral-50 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg border border-neutral-200/60">
               <stat.icon className={`w-8 h-8 ${stat.color}`} />
             </div>
             <div className="text-3xl font-bold text-neutral-900 mb-1">{stat.value}</div>
@@ -43,4 +43,3 @@ export default function CommunityStats() {
     </section>
   );
 }
-
