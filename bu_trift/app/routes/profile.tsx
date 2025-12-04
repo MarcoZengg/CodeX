@@ -17,11 +17,12 @@ interface ItemGridProps {
   items: ItemType[];
   onDelete?: (id: string) => void;
   onMarkSold?: (id: string) => void;
+  onEdit?: (id: string) => void;
   deletingId?: string | null;
   updatingId?: string | null;
 }
 
-function ItemGrid({ items, onDelete, onMarkSold, deletingId, updatingId }: ItemGridProps) {
+function ItemGrid({ items, onDelete, onMarkSold, onEdit, deletingId, updatingId }: ItemGridProps) {
   if (items.length === 0) {
     return (
       <div className="text-center py-12">
@@ -71,8 +72,20 @@ function ItemGrid({ items, onDelete, onMarkSold, deletingId, updatingId }: ItemG
                 </p>
               </CardContent>
             </Link>
-            {onDelete && (
+            {(onDelete || onMarkSold || onEdit) && (
               <div className="px-4 pb-4 space-y-2">
+                {onEdit && (
+                  <Button
+                    className="w-full bg-red-600 hover:bg-red-700"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onEdit(item.id);
+                    }}
+                  >
+                    Edit listing
+                  </Button>
+                )}
                 {onMarkSold && item.status === "available" && (
                   <Button
                     variant="secondary"
@@ -87,18 +100,20 @@ function ItemGrid({ items, onDelete, onMarkSold, deletingId, updatingId }: ItemG
                     {updatingId === item.id ? "Marking..." : "Mark as sold"}
                   </Button>
                 )}
-                <Button
-                  variant="outline"
-                  className="w-full border-red-200 text-red-700 hover:bg-red-50"
-                  disabled={deletingId === item.id}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onDelete(item.id);
-                  }}
-                >
-                  {deletingId === item.id ? "Removing..." : "Remove listing"}
-                </Button>
+                {onDelete && (
+                  <Button
+                    variant="outline"
+                    className="w-full border-red-200 text-red-700 hover:bg-red-50"
+                    disabled={deletingId === item.id}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onDelete(item.id);
+                    }}
+                  >
+                    {deletingId === item.id ? "Removing..." : "Remove listing"}
+                  </Button>
+                )}
               </div>
             )}
           </Card>
@@ -177,6 +192,10 @@ export default function Profile() {
     } finally {
       setDeletingId(null);
     }
+  };
+
+  const handleEditItem = (itemId: string) => {
+    navigate(`/items/${itemId}/edit`);
   };
 
   const handleMarkSold = async (itemId: string) => {
@@ -382,6 +401,7 @@ export default function Profile() {
               <ItemGrid
                 items={userItems.filter(item => item.status === "available")}
                 onDelete={handleDeleteItem}
+                onEdit={handleEditItem}
                 onMarkSold={handleMarkSold}
                 deletingId={deletingId}
                 updatingId={updatingId}
@@ -389,13 +409,17 @@ export default function Profile() {
             </TabsContent>
             
             <TabsContent value="sold" className="mt-6">
-              <ItemGrid items={userItems.filter(item => item.status === "sold")} />
+              <ItemGrid
+                items={userItems.filter(item => item.status === "sold")}
+                onEdit={handleEditItem}
+              />
             </TabsContent>
             
             <TabsContent value="all" className="mt-6">
               <ItemGrid
                 items={userItems}
                 onDelete={handleDeleteItem}
+                onEdit={handleEditItem}
                 onMarkSold={handleMarkSold}
                 deletingId={deletingId}
                 updatingId={updatingId}

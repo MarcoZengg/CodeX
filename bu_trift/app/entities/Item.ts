@@ -252,6 +252,45 @@ export class ItemEntity {
   }
 
   /* =============================
+     UPDATE ITEM (Firebase-protected)
+     ============================= */
+  static async update(id: string, data: Partial<Item>): Promise<Item> {
+    try {
+      const token = await getFirebaseToken(false);
+      if (!token) throw new Error("You must be logged in to update an item.");
+
+      const body: Partial<Item> = {
+        title: data.title,
+        description: data.description,
+        price: data.price,
+        category: data.category,
+        condition: data.condition,
+        location: data.location ?? null,
+        is_negotiable: data.is_negotiable,
+        images: data.images,
+      };
+
+      const response = await fetchWithAuth(`${API_URL}/api/items/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to update item");
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error updating item:", error);
+      throw error;
+    }
+  }
+
+  /* =============================
      DELETE ITEM (Firebase-protected)
      ============================= */
   static async delete(id: string): Promise<void> {
