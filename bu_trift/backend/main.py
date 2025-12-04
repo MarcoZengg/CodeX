@@ -332,7 +332,7 @@ async def upload_image(
 
 @app.get("/")
 def root():
-    return {"message": "BUTrift API is running!"}
+    return {"message": "BUThrift API is running!"}
 
 
 @app.get("/api/items", response_model=List[ItemResponse])

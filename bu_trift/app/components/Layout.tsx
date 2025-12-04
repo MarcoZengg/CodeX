@@ -108,7 +108,7 @@ export default function Layout({ children }: LayoutProps) {
               <span className="text-white font-bold text-lg">BU</span>
             </div>
             <div>
-              <h2 className="font-bold text-xl text-neutral-900 tracking-tight">BUTrift</h2>
+              <h2 className="font-bold text-xl text-neutral-900 tracking-tight">BUThrift</h2>
               <p className="text-sm text-neutral-600 font-medium">Campus Marketplace</p>
             </div>
           </div>
@@ -204,7 +204,7 @@ export default function Layout({ children }: LayoutProps) {
               <div className="w-8 h-8 bg-gradient-to-br from-red-600 to-red-700 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-sm">BU</span>
               </div>
-              <h1 className="text-lg font-bold text-neutral-900">BUTrift</h1>
+              <h1 className="text-lg font-bold text-neutral-900">BUThrift</h1>
             </div>
             <Button
               variant="outline"

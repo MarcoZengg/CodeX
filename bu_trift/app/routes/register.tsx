@@ -20,8 +20,8 @@ import { API_URL } from "@/config";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Register - BUTrift" },
-    { name: "description", content: "Create your BUTrift account" },
+    { title: "Register - BUThrift" },
+    { name: "description", content: "Create your BUThrift account" },
   ];
 }
 
@@ -249,7 +249,7 @@ export default function Register(_props: Route.ComponentProps) {
             </div>
             <CardTitle className="text-3xl font-bold text-neutral-900">Create Account</CardTitle>
             <CardDescription className="text-neutral-600">
-              Join BUTrift and start buying and selling on campus
+              Join BUThrift and start buying and selling on campus
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -265,7 +265,7 @@ export default function Register(_props: Route.ComponentProps) {
                     <div>
                       <p className="font-semibold mb-1">Welcome! You're almost there.</p>
                       <p className="text-xs">
-                        You tried to sign in with Google, but you don't have an account yet. Please complete your registration below to create your BUTrift account.
+                        You tried to sign in with Google, but you don't have an account yet. Please complete your registration below to create your BUThrift account.
                       </p>
                     </div>
                   </div>
@@ -332,7 +332,7 @@ export default function Register(_props: Route.ComponentProps) {
                   <Input
                     id="display_name"
                     type="text"
-                    placeholder="Your name as it appears on BUTrift"
+                    placeholder="Your name as it appears on BUThrift"
                     value={formData.display_name}
                     onChange={(e) => handleChange("display_name", e.target.value)}
                     className="pl-10 h-12"

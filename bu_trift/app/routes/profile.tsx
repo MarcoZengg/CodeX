@@ -125,7 +125,7 @@ function ItemGrid({ items, onDelete, onMarkSold, onEdit, deletingId, updatingId 
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Profile - BUTrift" },
+    { title: "Profile - BUThrift" },
     { name: "description", content: "View your profile and listings" },
   ];
 }
@@ -245,7 +245,7 @@ export default function Profile() {
                 </div>
                 
                 <h1 className="text-3xl font-bold text-neutral-900 mb-4">
-                  Welcome to BUTrift
+                  Welcome to BUThrift
                 </h1>
                 
                 <p className="text-lg text-neutral-600 mb-8 max-w-md mx-auto">
@@ -277,7 +277,7 @@ export default function Profile() {
                   </p>
                   <Link to={createPageUrl("Register")}>
                     <Button variant="ghost" className="text-red-600 hover:text-red-700 hover:bg-red-50">
-                      Join BUTrift for free
+                      Join BUThrift for free
                     </Button>
                   </Link>
                 </div>

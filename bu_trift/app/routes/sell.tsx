@@ -51,8 +51,8 @@ interface FormData {
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Sell Item - BUTrift" },
-    { name: "description", content: "List a new item for sale on BUTrift" },
+    { title: "Sell Item - BUThrift" },
+    { name: "description", content: "List a new item for sale on BUThrift" },
   ];
 }
 

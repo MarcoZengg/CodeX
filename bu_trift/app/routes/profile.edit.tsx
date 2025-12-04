@@ -13,7 +13,7 @@ import { Trash2, Loader2, AlertTriangle } from "lucide-react";
 const MAX_BIO_LENGTH = 250;
 
 export function meta() {
-  return [{ title: "Edit Profile - BUTrift" }];
+  return [{ title: "Edit Profile - BUThrift" }];
 }
 
 export default function EditProfile() {

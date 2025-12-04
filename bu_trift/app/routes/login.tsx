@@ -17,8 +17,8 @@ import { API_URL } from "@/config";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Login - BUTrift" },
-    { name: "description", content: "Sign in to your BUTrift account" },
+    { title: "Login - BUThrift" },
+    { name: "description", content: "Sign in to your BUThrift account" },
   ];
 }
 
@@ -203,7 +203,7 @@ export default function Login(_props: Route.ComponentProps) {
               Welcome Back
             </CardTitle>
             <CardDescription className="text-neutral-600">
-              Sign in to your BUTrift account to continue
+              Sign in to your BUThrift account to continue
             </CardDescription>
           </CardHeader>
 

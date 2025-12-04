@@ -15,7 +15,7 @@ import CommunityStats from "../components/home/CommunityStats";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "BUTrift - Campus Marketplace" },
+    { title: "BUThrift - Campus Marketplace" },
     { name: "description", content: "Boston University's trusted marketplace for sustainable student living" },
   ];
 }
@@ -72,7 +72,7 @@ export default function Home() {
               <Info className="w-8 h-8 text-indigo-600 mt-1" />
             </div>
             <div className="flex-1">
-              <h3 className="text-2xl font-bold text-neutral-900 mb-2">Learn About BUTrift</h3>
+              <h3 className="text-2xl font-bold text-neutral-900 mb-2">Learn About BUThrift</h3>
               <p className="text-neutral-700 mb-6">
                 Discover our mission to create a sustainable and connected Boston University community. 
                 Meet the team, learn about our impact, and join hundreds of students making a difference.

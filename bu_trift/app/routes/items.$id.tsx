@@ -23,7 +23,7 @@ const conditionColors: Record<string, string> = {
 
 export function meta({ params }: Route.MetaArgs) {
   return [
-    { title: `Item Details - BUTrift` },
+    { title: `Item Details - BUThrift` },
     { name: "description", content: "View item details" },
   ];
 }

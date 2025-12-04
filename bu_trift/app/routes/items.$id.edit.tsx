@@ -51,7 +51,7 @@ interface FormData {
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Edit Listing - BUTrift" },
+    { title: "Edit Listing - BUThrift" },
     { name: "description", content: "Update your item listing" },
   ];
 }

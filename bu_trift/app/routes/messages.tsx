@@ -10,7 +10,7 @@ import { API_URL } from "@/config";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Messages - BUTrift" },
+    { title: "Messages - BUThrift" },
     { name: "description", content: "View your conversations" },
   ];
 }

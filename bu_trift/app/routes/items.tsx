@@ -36,8 +36,8 @@ const categories = [
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Browse Items - BUTrift" },
-    { name: "description", content: "Browse available items on BUTrift" },
+    { title: "Browse Items - BUThrift" },
+    { name: "description", content: "Browse available items on BUThrift" },
   ];
 }
 
