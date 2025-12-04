@@ -1,8 +1,14 @@
 from sqlalchemy import Column, String, Float, Boolean, DateTime
 from sqlalchemy.sql import func
-from sqlalchemy.dialects.sqlite import JSON   # If using SQLite
-# If using PostgreSQL instead, use:
-# from sqlalchemy.dialects.postgresql import JSON
+import os
+
+# Use appropriate JSON type based on database
+# PostgreSQL uses JSONB, SQLite uses JSON
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./butrift.db")
+if DATABASE_URL.startswith("postgresql://") or DATABASE_URL.startswith("postgres://"):
+    from sqlalchemy.dialects.postgresql import JSON
+else:
+    from sqlalchemy.dialects.sqlite import JSON
 
 from database import Base
 
