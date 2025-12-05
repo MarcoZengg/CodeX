@@ -1,6 +1,6 @@
 // Import API URL from config
 import { API_URL } from "../config";
-import { getFirebaseToken, fetchWithAuth } from "../utils/auth";
+import { getFirebaseToken, fetchWithAuth, getAuthHeaders } from "../utils/auth";
 
 export interface Message {
   id: string;
@@ -17,7 +17,7 @@ export interface Conversation {
   id: string;
   participant1_id: string;
   participant2_id: string;
-  item_id?: string;
+  item_id: string; // Required: item-specific conversation
   last_message_at?: string;
   created_date: string;
   updated_date: string;
@@ -38,16 +38,6 @@ export interface MessageCreate {
   content: string;
 }
 
-// Helper function to get auth headers
-async function getAuthHeaders(includeJSON: boolean = true): Promise<HeadersInit> {
-  const token = await getFirebaseToken(false);
-  const headers: HeadersInit = {};
-
-  if (includeJSON) headers["Content-Type"] = "application/json";
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-
-  return headers;
-}
 
 // Entity class for Message operations
 export class MessageEntity {

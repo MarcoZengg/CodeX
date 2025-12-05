@@ -1,5 +1,5 @@
 import { API_URL } from "../config";
-import { fetchWithAuth, getFirebaseToken } from "../utils/auth";
+import { fetchWithAuth, getFirebaseToken, getAuthHeaders } from "../utils/auth";
 
 export interface BuyRequest {
   id?: string;
@@ -12,20 +12,11 @@ export interface BuyRequest {
   responded_date?: string | null;
 }
 
-async function getAuthHeaders(): Promise<HeadersInit> {
-  const token = await getFirebaseToken(false);
-  if (!token) throw new Error("You must be logged in.");
-
-  return {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
-  };
-}
 
 export class BuyRequestEntity {
   static async create(item_id: string, conversation_id?: string): Promise<BuyRequest> {
     try {
-      const headers = await getAuthHeaders();
+      const headers = await getAuthHeaders(true, true); // includeJSON=true, requireAuth=true
       const response = await fetchWithAuth(`${API_URL}/api/buy-requests`, {
         method: "POST",
         headers,
@@ -46,7 +37,7 @@ export class BuyRequestEntity {
 
   static async accept(request_id: string): Promise<{ buy_request: BuyRequest; transaction: any }> {
     try {
-      const headers = await getAuthHeaders();
+      const headers = await getAuthHeaders(true, true); // includeJSON=true, requireAuth=true
       const response = await fetchWithAuth(`${API_URL}/api/buy-requests/${request_id}/accept`, {
         method: "PATCH",
         headers,
@@ -66,7 +57,7 @@ export class BuyRequestEntity {
 
   static async reject(request_id: string): Promise<BuyRequest> {
     try {
-      const headers = await getAuthHeaders();
+      const headers = await getAuthHeaders(true, true); // includeJSON=true, requireAuth=true
       const response = await fetchWithAuth(`${API_URL}/api/buy-requests/${request_id}/reject`, {
         method: "PATCH",
         headers,
@@ -86,7 +77,7 @@ export class BuyRequestEntity {
 
   static async cancel(request_id: string): Promise<BuyRequest> {
     try {
-      const headers = await getAuthHeaders();
+      const headers = await getAuthHeaders(true, true); // includeJSON=true, requireAuth=true
       const response = await fetchWithAuth(`${API_URL}/api/buy-requests/${request_id}/cancel`, {
         method: "PATCH",
         headers,
@@ -106,7 +97,7 @@ export class BuyRequestEntity {
 
   static async getByConversation(conversation_id: string): Promise<BuyRequest[]> {
     try {
-      const headers = await getAuthHeaders();
+      const headers = await getAuthHeaders(true, true); // includeJSON=true, requireAuth=true
       const response = await fetchWithAuth(`${API_URL}/api/buy-requests/by-conversation/${conversation_id}`, {
         method: "GET",
         headers,
@@ -125,7 +116,7 @@ export class BuyRequestEntity {
 
   static async get(id: string): Promise<BuyRequest> {
     try {
-      const headers = await getAuthHeaders();
+      const headers = await getAuthHeaders(true, true); // includeJSON=true, requireAuth=true
       const response = await fetchWithAuth(`${API_URL}/api/buy-requests/${id}`, {
         method: "GET",
         headers,

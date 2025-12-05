@@ -19,7 +19,14 @@ if DATABASE_URL.startswith("sqlite"):
     )
 else:
     # PostgreSQL (production on Render)
-    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+    # Increase pool size to handle WebSocket connections better
+    engine = create_engine(
+        DATABASE_URL,
+        pool_pre_ping=True,  # Verify connections before using
+        pool_size=10,  # Increased from default 5
+        max_overflow=20,  # Increased overflow capacity
+        pool_recycle=3600  # Recycle connections after 1 hour
+    )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

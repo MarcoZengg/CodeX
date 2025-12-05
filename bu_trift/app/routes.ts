@@ -14,4 +14,5 @@ export default [
   route("login", "routes/login.tsx"),
   route("complete-profile", "routes/complete-profile.tsx"),
   route("transactions/:id", "routes/transactions.$id.tsx"),
+  route("appointments/:itemId", "routes/appointments.$itemId.tsx"),
 ] satisfies RouteConfig;

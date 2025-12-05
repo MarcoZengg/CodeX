@@ -158,3 +158,34 @@ export function getCurrentFirebaseUser(): User | null {
   return auth.currentUser;
 }
 
+/**
+ * Get authentication headers for API requests
+ * Shared utility function used across all entity files
+ * 
+ * @param includeJSON - Whether to include Content-Type: application/json header (default: true)
+ * @param requireAuth - Whether to throw error if token is missing (default: false)
+ * @returns Headers object with Authorization and optional Content-Type
+ */
+export async function getAuthHeaders(
+  includeJSON: boolean = true,
+  requireAuth: boolean = false
+): Promise<HeadersInit> {
+  const token = await getFirebaseToken(false);
+  
+  if (requireAuth && !token) {
+    throw new Error("You must be logged in.");
+  }
+  
+  const headers: HeadersInit = {};
+  
+  if (includeJSON) {
+    headers["Content-Type"] = "application/json";
+  }
+  
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  
+  return headers;
+}
+

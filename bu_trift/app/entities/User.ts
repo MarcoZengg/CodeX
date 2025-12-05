@@ -8,7 +8,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import { getFirebaseToken, fetchWithAuth } from "../utils/auth";
+import { getFirebaseToken, fetchWithAuth, getAuthHeaders } from "../utils/auth";
 
 export interface User {
   id?: string;
@@ -41,16 +41,6 @@ export interface UserProfileCreate {
   bio?: string;
 }
 
-/* AUTH HEADERS*/
-async function getAuthHeaders(includeJSON: boolean = true): Promise<HeadersInit> {
-  const token = await getFirebaseToken(false);
-  const headers: HeadersInit = {};
-
-  if (includeJSON) headers["Content-Type"] = "application/json";
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-
-  return headers;
-}
 
 /* USER ENTITY (Firebase + Backend) */
 export class UserEntity {

@@ -1,13 +1,13 @@
 // Import API URL from config
 import { API_URL } from "../config";
-import { getFirebaseToken, fetchWithAuth } from "../utils/auth";
+import { getFirebaseToken, fetchWithAuth, getAuthHeaders } from "../utils/auth";
 
 // Updated interface to match backend response
 export interface Conversation {
   id: string;
   participant1_id: string;
   participant2_id: string;
-  item_id?: string;
+  item_id: string;  // Required: item-specific conversation
   last_message_at?: string;
   created_date: string;
   updated_date: string;
@@ -16,18 +16,9 @@ export interface Conversation {
   item_image_url?: string;
   participant_ids?: string[]; // For backward compatibility
   last_message_snippet?: string; // For backward compatibility
+  unread_count?: number; // For UI display
 }
 
-// Helper function to get auth headers
-async function getAuthHeaders(includeJSON: boolean = true): Promise<HeadersInit> {
-  const token = await getFirebaseToken(false);
-  const headers: HeadersInit = {};
-
-  if (includeJSON) headers["Content-Type"] = "application/json";
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-
-  return headers;
-}
 
 // Entity class for Conversation operations
 export class ConversationEntity {
@@ -50,6 +41,11 @@ export class ConversationEntity {
         throw new Error("Missing participant IDs");
       }
 
+      // Validate item_id is provided
+      if (!data.item_id) {
+        throw new Error("item_id is required for item-specific conversations");
+      }
+
       const headers = await getAuthHeaders();
       const response = await fetchWithAuth(`${API_URL}/api/conversations`, {
         method: "POST",
@@ -57,7 +53,7 @@ export class ConversationEntity {
         body: JSON.stringify({
           participant1_id,
           participant2_id,
-          item_id: data.item_id,
+          item_id: data.item_id,  // Required
         }),
       });
 

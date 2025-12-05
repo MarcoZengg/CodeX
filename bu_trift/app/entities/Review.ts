@@ -1,5 +1,5 @@
 import { API_URL } from "../config";
-import { fetchWithAuth, getFirebaseToken } from "../utils/auth";
+import { fetchWithAuth, getFirebaseToken, getAuthHeaders } from "../utils/auth";
 
 export interface Review {
     id?: string;
@@ -20,14 +20,6 @@ export interface ReviewCreate {
     comment?: string;
 }
 
-async function getAuthHeaders(): Promise<HeadersInit> {
-    const token = await getFirebaseToken(false);
-    const headers: HeadersInit = {
-        "Content-Type": "application/json",
-    };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-    return headers;
-}
 
 export class ReviewEntity {
     static async create(data: ReviewCreate): Promise<Review> {

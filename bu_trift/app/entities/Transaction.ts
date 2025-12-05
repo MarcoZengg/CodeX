@@ -1,5 +1,5 @@
 import { API_URL } from "../config";
-import { fetchWithAuth, getFirebaseToken } from "../utils/auth";
+import { fetchWithAuth, getFirebaseToken, getAuthHeaders } from "../utils/auth";
 
 export interface Transaction {
   id?: string;
@@ -21,20 +21,11 @@ export interface Transaction {
   completed_date?: string | null;
 }
 
-async function getAuthHeaders(): Promise<HeadersInit> {
-  const token = await getFirebaseToken(false);
-  if (!token) throw new Error("You must be logged in.");
-
-  return {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
-  };
-}
 
 export class TransactionEntity {
   static async get(id: string): Promise<Transaction> {
     try {
-      const headers = await getAuthHeaders();
+      const headers = await getAuthHeaders(true, true); // includeJSON=true, requireAuth=true
       const response = await fetchWithAuth(`${API_URL}/api/transactions/${id}`, {
         method: "GET",
         headers,
@@ -54,7 +45,7 @@ export class TransactionEntity {
 
   static async getAllByConversation(conversation_id: string): Promise<Transaction[]> {
     try {
-      const headers = await getAuthHeaders();
+      const headers = await getAuthHeaders(true, true); // includeJSON=true, requireAuth=true
       const response = await fetchWithAuth(`${API_URL}/api/transactions/by-conversation/${conversation_id}/all`, {
         method: "GET",
         headers,
@@ -74,7 +65,7 @@ export class TransactionEntity {
 
   static async update(id: string, data: Partial<Transaction>): Promise<Transaction> {
     try {
-      const headers = await getAuthHeaders();
+      const headers = await getAuthHeaders(true, true); // includeJSON=true, requireAuth=true
       const response = await fetchWithAuth(`${API_URL}/api/transactions/${id}`, {
         method: "PATCH",
         headers,
@@ -95,7 +86,7 @@ export class TransactionEntity {
 
   static async cancel(id: string): Promise<Transaction> {
     try {
-      const headers = await getAuthHeaders();
+      const headers = await getAuthHeaders(true, true); // includeJSON=true, requireAuth=true
       const response = await fetchWithAuth(`${API_URL}/api/transactions/${id}/cancel`, {
         method: "PATCH",
         headers,

@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Star, MapPin, MessageCircle, ShieldCheck, ArrowLeft, ChevronLeft, ChevronRight, Edit3 } from "lucide-react";
+import { Star, MapPin, MessageCircle, ShieldCheck, ArrowLeft, ChevronLeft, ChevronRight, Edit3, Calendar } from "lucide-react";
 import { motion } from "framer-motion";
 
 const conditionColors: Record<string, string> = {
@@ -74,18 +74,22 @@ export default function ItemDetail({ params }: Route.ComponentProps) {
     setIsLoading(true);
     try {
       const itemData = await Item.get(id);
-      const userData = await User.getById(itemData.seller_id);
-      setItem(itemData);
       if (itemData.seller_id) {
-        const sellerData = {
-          id: itemData.seller_id,
-          display_name: userData.display_name,
-          profile_image_url: userData.profile_image_url,
-          rating: userData.rating,
-          total_sales: userData.total_sales,
-          is_verified: userData.is_verified,
-        };
-        setSeller(sellerData);
+        const userData = await User.getById(itemData.seller_id);
+        setItem(itemData);
+        if (userData) {
+          const sellerData = {
+            id: itemData.seller_id,
+            display_name: userData.display_name,
+            profile_image_url: userData.profile_image_url,
+            rating: userData.rating,
+            total_sales: userData.total_sales,
+            is_verified: userData.is_verified,
+          };
+          setSeller(sellerData);
+        }
+      } else {
+        setItem(itemData);
       }
       
       // Check for existing buy request if user is logged in
@@ -165,15 +169,19 @@ export default function ItemDetail({ params }: Route.ComponentProps) {
             participant_ids: { op: 'contains', value: currentUser.id! } as any
         });
 
-        const existingConvoWithSeller = existingConvos.find(c => 
-          (c.participant1_id === seller.id || c.participant2_id === seller.id)
+        // Find conversation for THIS specific item
+        const existingConvoForItem = existingConvos.find(c => 
+          (c.participant1_id === seller.id || c.participant2_id === seller.id) &&
+          c.item_id === item.id  // Item-specific check
         );
 
-        if (existingConvoWithSeller) {
-            navigate(`${createPageUrl("Messages")}?conversationId=${existingConvoWithSeller.id}`);
+        if (existingConvoForItem) {
+            // Navigate to messages page - "Request to Buy" button will be in the header
+            navigate(`${createPageUrl("Messages")}?conversationId=${existingConvoForItem.id}`);
         } else {
+            // Create new conversation and navigate to messages page
             const newConversation = await Conversation.create({
-                item_id: item.id!,
+                item_id: item.id!,  // Required: item-specific
                 participant1_id: currentUser.id!,
                 participant2_id: seller.id,
             });
@@ -184,38 +192,6 @@ export default function ItemDetail({ params }: Route.ComponentProps) {
         alert("Failed to start conversation. Please try again.");
     } finally {
         setIsSendingMessage(false);
-    }
-  };
-  
-  const handleRequestToBuy = async () => {
-    if (!currentUser || !seller || !item) return;
-    setIsRequesting(true);
-    
-    try {
-      // Find existing conversation or create one
-      const existingConvos = await Conversation.filter({
-        participant_ids: { op: 'contains', value: currentUser.id! } as any
-      });
-      
-      const existingConvoWithSeller = existingConvos.find(c => 
-        (c.participant1_id === seller.id || c.participant2_id === seller.id)
-      );
-      
-      const conversation_id = existingConvoWithSeller?.id;
-      
-      // Create buy request
-      const buyRequest = await BuyRequest.create(item.id!, conversation_id);
-      setBuyRequestStatus("pending");
-      
-      // Navigate to messages page
-      if (buyRequest.conversation_id) {
-        navigate(`${createPageUrl("Messages")}?conversationId=${buyRequest.conversation_id}`);
-      }
-    } catch (error: any) {
-      console.error("Error creating buy request:", error);
-      alert(error.message || "Failed to create buy request. Please try again.");
-    } finally {
-      setIsRequesting(false);
     }
   };
   
@@ -364,30 +340,25 @@ export default function ItemDetail({ params }: Route.ComponentProps) {
                       </div>
                     </div>
                     <div className="flex flex-col gap-3 mt-6">
-                      {buyRequestStatus === "none" && item.status === "available" && (
+                      {item.status === "available" && currentUser && currentUser.id !== seller.id && (
                         <>
                           <Button 
                             className="w-full bg-red-600 hover:bg-red-700" 
-                            onClick={handleRequestToBuy}
-                            disabled={isRequesting || !currentUser || currentUser.id === seller.id}
+                            onClick={() => navigate(`/appointments/${item.id}`)}
                           >
-                            {isRequesting ? "Requesting..." : "Request to Buy"}
+                            <Calendar className="w-4 h-4 mr-2" />
+                            Set up appointment
                           </Button>
                           <Button 
                             className="w-full" 
                             variant="outline"
                             onClick={handleSendMessage}
-                            disabled={isSendingMessage || !currentUser || currentUser.id === seller.id}
+                            disabled={isSendingMessage}
                           >
                             <MessageCircle className="w-4 h-4 mr-2" />
                             {isSendingMessage ? "Starting..." : "Message Seller"}
                           </Button>
                         </>
-                      )}
-                      {buyRequestStatus === "pending" && (
-                        <Button disabled className="w-full" variant="outline">
-                          Buy Request Pending
-                        </Button>
                       )}
                       {buyRequestStatus === "accepted" && activeTransactionId && (
                         <Button 
@@ -397,12 +368,12 @@ export default function ItemDetail({ params }: Route.ComponentProps) {
                           View Transaction
                         </Button>
                       )}
-                      {!currentUser && (
+                      {!currentUser && item.status === "available" && (
                         <Button 
                           className="w-full bg-red-600 hover:bg-red-700" 
                           onClick={() => navigate(createPageUrl("Login"))}
                         >
-                          Log In to Request to Buy
+                          Log In to Message Seller
                         </Button>
                       )}
                       {currentUser?.id === seller.id && (
@@ -410,7 +381,7 @@ export default function ItemDetail({ params }: Route.ComponentProps) {
                           This is your item
                         </Button>
                       )}
-                      {item.status !== "available" && buyRequestStatus === "none" && !activeTransactionId && currentUser && currentUser.id !== seller.id && (
+                      {item.status !== "available" && currentUser && currentUser.id !== seller.id && (
                         <Button disabled className="w-full" variant="outline">
                           Item is {item.status}
                         </Button>

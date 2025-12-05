@@ -1,16 +1,15 @@
 import { useEffect, useState, useRef } from "react";
 import type { Route } from "./+types/messages";
-import { Conversation, User, Message, BuyRequest, Transaction, Item } from "@/entities";
+import { Conversation, User, Message, Transaction, Item } from "@/entities";
 import type { Conversation as ConversationType } from "@/entities/Conversation";
 import type { User as UserType } from "@/entities/User";
 import type { Message as MessageType } from "@/entities/Message";
-import type { BuyRequest as BuyRequestType } from "@/entities/BuyRequest";
 import type { Transaction as TransactionType } from "@/entities/Transaction";
 import type { Item as ItemType } from "@/entities/Item";
 import { MessageEntity } from "@/entities/Message";
 import { WebSocketClient } from "@/utils/websocket";
 import { API_URL } from "@/config";
-import { useNavigate, Link } from "react-router";
+import { useNavigate, Link, useSearchParams } from "react-router";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,306 +20,6 @@ export function meta({}: Route.MetaArgs) {
     { title: "Messages - BUThrift" },
     { name: "description", content: "View your conversations" },
   ];
-}
-
-// Buy Request Message Component
-function BuyRequestMessageComponent({
-  message,
-  buyRequest,
-  currentUser,
-  transactions,
-  onAccept,
-  onReject,
-  onCancel,
-}: {
-  message: MessageType;
-  buyRequest: BuyRequestType;
-  currentUser: UserType | null;
-  transactions: TransactionType[];
-  onAccept: () => void;
-  onReject: () => void;
-  onCancel: () => void;
-}) {
-  const [item, setItem] = useState<ItemType | null>(null);
-  const [loading, setLoading] = useState(true);
-  
-  useEffect(() => {
-    async function loadItem() {
-      try {
-        const itemData = await Item.get(buyRequest.item_id);
-        setItem(itemData);
-      } catch (error) {
-        console.error("Error loading item:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadItem();
-  }, [buyRequest.item_id]);
-  
-  const isSeller = currentUser?.id === buyRequest.seller_id;
-  const isBuyer = currentUser?.id === buyRequest.buyer_id;
-  
-  if (loading) {
-    return <div style={{ color: "#999", fontSize: 14 }}>Loading buy request...</div>;
-  }
-  
-  return (
-    <div
-      style={{
-        border: "1px solid #dbeafe",
-        borderRadius: 12,
-        padding: 16,
-        backgroundColor: "#eff6ff",
-        marginBottom: 8,
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <h4 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Buy Request</h4>
-        <span
-          style={{
-            padding: "4px 8px",
-            borderRadius: 6,
-            fontSize: 12,
-            fontWeight: 600,
-            backgroundColor:
-              buyRequest.status === "pending" ? "#fef3c7" :
-              buyRequest.status === "accepted" ? "#d1fae5" :
-              "#fee2e2",
-            color:
-              buyRequest.status === "pending" ? "#92400e" :
-              buyRequest.status === "accepted" ? "#065f46" :
-              "#991b1b",
-          }}
-        >
-          {buyRequest.status.toUpperCase()}
-        </span>
-      </div>
-      
-      {item && (
-        <Link to={`/items/${item.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-          <Card 
-            style={{
-              marginBottom: 12,
-              border: "1px solid #e5e5e5",
-              borderRadius: 8,
-              overflow: "hidden",
-              cursor: "pointer",
-              transition: "all 0.2s",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.boxShadow = "0 4px 6px rgba(0, 0, 0, 0.1)";
-              e.currentTarget.style.transform = "translateY(-2px)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.boxShadow = "none";
-              e.currentTarget.style.transform = "translateY(0)";
-            }}
-          >
-            <div style={{ display: "flex", gap: 12 }}>
-              {/* Item Image */}
-              <div
-                style={{
-                  width: 120,
-                  height: 120,
-                  backgroundColor: "#f5f5f5",
-                  flexShrink: 0,
-                  position: "relative",
-                  overflow: "hidden",
-                }}
-              >
-                {item.images?.[0] ? (
-                  <img
-                    src={item.images[0]}
-                    alt={item.title}
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Package style={{ width: 32, height: 32, color: "#999" }} />
-                  </div>
-                )}
-                <div style={{ position: "absolute", top: 8, right: 8 }}>
-                  <Badge
-                    style={{
-                      fontSize: 10,
-                      padding: "2px 6px",
-                      backgroundColor:
-                        item.status === "available" ? "#d1fae5" : "#fee2e2",
-                      color:
-                        item.status === "available" ? "#065f46" : "#991b1b",
-                      border: "none",
-                    }}
-                  >
-                    {item.status}
-                  </Badge>
-                </div>
-              </div>
-
-              {/* Item Details */}
-              <CardContent
-                style={{
-                  padding: 12,
-                  flex: 1,
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "space-between",
-                }}
-              >
-                <div>
-                  <h4
-                    style={{
-                      fontSize: 16,
-                      fontWeight: 600,
-                      margin: "0 0 4px 0",
-                      color: "#111",
-                    }}
-                  >
-                    {item.title}
-                  </h4>
-                  {item.condition && (
-                    <Badge
-                      style={{
-                        fontSize: 11,
-                        padding: "2px 6px",
-                        marginBottom: 8,
-                        backgroundColor: "#f3f4f6",
-                        color: "#374151",
-                        border: "none",
-                      }}
-                    >
-                      {item.condition.replace("_", " ")}
-                    </Badge>
-                  )}
-                </div>
-                <p
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 700,
-                    color: "#dc2626",
-                    margin: 0,
-                  }}
-                >
-                  ${item.price}
-                </p>
-              </CardContent>
-            </div>
-          </Card>
-        </Link>
-      )}
-      
-      {buyRequest.status === "pending" && isSeller && (
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={onAccept}
-            style={{
-              flex: 1,
-              padding: "8px 16px",
-              borderRadius: 8,
-              border: "none",
-              backgroundColor: "#dc2626",
-              color: "white",
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            Accept
-          </button>
-          <button
-            onClick={onReject}
-            style={{
-              flex: 1,
-              padding: "8px 16px",
-              borderRadius: 8,
-              border: "1px solid #e5e5e5",
-              backgroundColor: "#fff",
-              color: "#444",
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            Reject
-          </button>
-        </div>
-      )}
-      
-      {buyRequest.status === "pending" && isBuyer && (
-        <button
-          onClick={onCancel}
-          style={{
-            padding: "6px 12px",
-            borderRadius: 8,
-            border: "1px solid #e5e5e5",
-            backgroundColor: "#fff",
-            color: "#444",
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-        >
-          Cancel Request
-        </button>
-      )}
-      
-      {buyRequest.status === "accepted" && (() => {
-        // Find the transaction for this buy request
-        const transaction = transactions.find(tx => tx.buy_request_id === buyRequest.id);
-        
-        return (
-          <div style={{ marginTop: 12 }}>
-            <p style={{ fontSize: 13, color: "#059669", fontWeight: 600, margin: "0 0 8px 0" }}>
-              ✓ Request accepted! Transaction started.
-            </p>
-            {transaction && transaction.id && (
-              <button
-                onClick={() => {
-                  window.location.href = `/transactions/${transaction.id}`;
-                }}
-                style={{
-                  width: "100%",
-                  padding: "10px 16px",
-                  borderRadius: 8,
-                  border: "none",
-                  backgroundColor: "#059669",
-                  color: "white",
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                }}
-              >
-                <span>→</span>
-                View Transaction
-              </button>
-            )}
-          </div>
-        );
-      })()}
-      
-      {buyRequest.status === "rejected" && (
-        <p style={{ fontSize: 13, color: "#dc2626", margin: 0 }}>
-          ✗ Request declined.
-        </p>
-      )}
-    </div>
-  );
 }
 
 export default function Messages() {
@@ -340,11 +39,17 @@ export default function Messages() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   
-  // Buy request and transaction state
-  const [buyRequests, setBuyRequests] = useState<BuyRequestType[]>([]);
+  // Transaction state
   const [transactions, setTransactions] = useState<TransactionType[]>([]);
   const [showTransactionList, setShowTransactionList] = useState(false);
+  
+  // Item state for the selected conversation
+  const [conversationItem, setConversationItem] = useState<ItemType | null>(null);
+  
+  // Current transaction for this conversation
+  const [currentTransaction, setCurrentTransaction] = useState<TransactionType | null>(null);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 768px)");
@@ -366,11 +71,15 @@ export default function Messages() {
 
               // Load conversations from API
               const conversations = await MessageEntity.getConversations(user.id);
-              // Add backward compatibility fields
-              const formattedConversations = conversations.map((conv) => ({
-                ...conv,
-                participant_ids: [conv.participant1_id, conv.participant2_id],
-              }));
+              // Add backward compatibility fields and ensure item_id is present
+              const formattedConversations: ConversationType[] = conversations
+                .filter((conv) => conv.item_id) // Only include conversations with item_id
+                .map((conv) => ({
+                  ...conv,
+                  item_id: conv.item_id!, // Assert non-null since we filtered
+                  participant_ids: [conv.participant1_id, conv.participant2_id],
+                  last_message_snippet: conv.last_message_snippet ?? undefined, // Convert null to undefined
+                }));
               setConversations(formattedConversations);
               setUnreadTotal(
                 formattedConversations.reduce(
@@ -456,52 +165,53 @@ export default function Messages() {
                     }
                     return [...prev, newMsg];
                   });
-                } else if (data.type === "buy_request_update") {
-                  // Handle buy request updates (accept, reject, cancel, or new request)
-                  const updatedBuyRequest = data.data;
-                  
-                  // Check if this conversation exists in our list and reload if it doesn't
-                  setConversations((prevConvs) => {
-                    const conversationExists = prevConvs.some(conv => conv.id === updatedBuyRequest.conversation_id);
-                    
-                    // If conversation doesn't exist, reload conversations list (new conversation created)
-                    if (!conversationExists && currentUser?.id) {
-                      // Reload conversations to include the new one
-                      MessageEntity.getConversations(currentUser.id).then((updatedConvs) => {
-                        setConversations(updatedConvs);
-                      }).catch(console.error);
-                    }
-                    
-                    return prevConvs;
-                  });
-                  
-                  // If this is the selected conversation, reload buy requests and messages
-                  if (selectedIdRef.current && updatedBuyRequest.conversation_id === selectedIdRef.current) {
-                    BuyRequest.getByConversation(selectedIdRef.current).then((updated) => {
-                      setBuyRequests(updated);
-                    }).catch(console.error);
-                    
-                    MessageEntity.getMessages(selectedIdRef.current).then((msgs) => {
-                      setMessages(msgs ?? []);
-                    }).catch(console.error);
-                  }
                 } else if (data.type === "transaction_created" || data.type === "transaction_update") {
-                  // Handle transaction updates
+                  // Handle transaction updates and reload transactions/item
                   const updatedTransaction = data.data;
                   
                   // Reload transactions for the current conversation if it matches
                   if (selectedIdRef.current && updatedTransaction.conversation_id === selectedIdRef.current) {
                     Transaction.getAllByConversation(selectedIdRef.current).then((updated) => {
                       setTransactions(updated);
+                      // Find the current in-progress transaction
+                      const inProgressTx = updated.find(tx => tx.status === "in_progress");
+                      setCurrentTransaction(inProgressTx || null);
                     }).catch(console.error);
+                    
+                    // Reload item to reflect status changes
+                    const selectedConversation = conversations.find(c => c.id === selectedIdRef.current);
+                    if (selectedConversation?.item_id) {
+                      Item.get(selectedConversation.item_id).then((itemData) => {
+                        setConversationItem(itemData);
+                      }).catch(console.error);
+                    }
                   }
                 }
               });
               wsClientRef.current = wsClient;
 
               if (formattedConversations.length > 0) {
-                const firstId = formattedConversations[0].id ?? null;
-                setSelectedId(firstId);
+                // Check for conversationId in URL query params
+                const conversationIdFromUrl = searchParams.get("conversationId");
+                if (conversationIdFromUrl) {
+                  // Check if this conversation exists in the list
+                  const urlConversation = formattedConversations.find(c => c.id === conversationIdFromUrl);
+                  if (urlConversation) {
+                    setSelectedId(conversationIdFromUrl);
+                    // Clear the query parameter from URL
+                    const newSearchParams = new URLSearchParams(searchParams);
+                    newSearchParams.delete("conversationId");
+                    navigate(`/messages${newSearchParams.toString() ? `?${newSearchParams.toString()}` : ''}`, { replace: true });
+                  } else {
+                    // Conversation not found, select first one
+                    const firstId = formattedConversations[0].id ?? null;
+                    setSelectedId(firstId);
+                  }
+                } else {
+                  // No conversationId in URL, select first conversation
+                  const firstId = formattedConversations[0].id ?? null;
+                  setSelectedId(firstId);
+                }
               }
             } else {
               // Invalid or mock user - set to null (user not logged in)
@@ -531,7 +241,7 @@ export default function Messages() {
         wsClientRef.current.disconnect();
       }
     };
-  }, []);
+  }, [searchParams, navigate]);
 
   // Update ref when selectedId changes
   useEffect(() => {
@@ -585,30 +295,56 @@ export default function Messages() {
     return () => clearTimeout(timeoutId);
   }, [messages, selectedId]);
 
-  // Load buy requests and transactions when conversation is selected
+  // Load transactions and item when conversation is selected
   useEffect(() => {
-    async function loadBuyRequestsAndTransactions() {
+    async function loadTransactionsAndItem() {
       if (!selectedId || !currentUser) {
-        setBuyRequests([]);
         setTransactions([]);
+        setConversationItem(null);
+        setCurrentTransaction(null);
         return;
       }
       
       try {
-        const [requests, txs] = await Promise.all([
-          BuyRequest.getByConversation(selectedId).catch(() => []),
-          Transaction.getAllByConversation(selectedId).catch(() => []),
-        ]);
+        const selectedConversation = conversations.find(c => c.id === selectedId);
         
-        setBuyRequests(requests || []);
+        // Load transactions for this conversation
+        const txs = await Transaction.getAllByConversation(selectedId).catch(() => []);
         setTransactions(txs || []);
+        
+        // Find the current in-progress transaction for this conversation
+        const inProgressTx = (txs || []).find(tx => tx.status === "in_progress");
+        setCurrentTransaction(inProgressTx || null);
+        
+        // Debug logging
+        if (inProgressTx) {
+          console.log("[Messages] Found in-progress transaction:", {
+            id: inProgressTx.id,
+            meetup_time: inProgressTx.meetup_time,
+            meetup_place: inProgressTx.meetup_place,
+            hasAppointment: !!(inProgressTx.meetup_time && inProgressTx.meetup_place)
+          });
+        } else {
+          console.log("[Messages] No in-progress transaction found for conversation:", selectedId);
+        }
+        
+        // Load item for this conversation
+        if (selectedConversation?.item_id) {
+          try {
+            const itemData = await Item.get(selectedConversation.item_id);
+            setConversationItem(itemData);
+          } catch (error) {
+            console.error("Error loading item:", error);
+            setConversationItem(null);
+          }
+        }
       } catch (error) {
-        console.error("Error loading buy requests/transactions:", error);
+        console.error("Error loading transactions/item:", error);
       }
     }
     
-    loadBuyRequestsAndTransactions();
-  }, [selectedId, currentUser]);
+    loadTransactionsAndItem();
+  }, [selectedId, currentUser, conversations]);
 
   const handleSend = async () => {
     if (!newMessage.trim() || !currentUser || !selectedId) return;
@@ -786,16 +522,17 @@ export default function Messages() {
                       </span>
                     )}
                   </div>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>{name}</div>
+                  <div style={{ fontWeight: 600, fontSize: 14, flex: 1 }}>{name}</div>
                 </div>
                 <div
                   style={{
-                    fontSize: 13,
-                    color: "#666",
+                    fontSize: 12,
+                    color: "#dc2626",
+                    fontWeight: 600,
                     marginBottom: 2,
                   }}
                 >
-                  {c.item_title ?? "Item"}
+                  📦 {c.item_title ?? "Item"}
                 </div>
                 <div
                   style={{
@@ -824,55 +561,250 @@ export default function Messages() {
       >
         {selectedConversation ? (
           <>
-            <div style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                {isMobile && (
-                  <button
-                    onClick={() => setShowingConversationPane(false)}
-                    style={{
-                      padding: "6px 10px",
-                      borderRadius: 8,
-                      border: "1px solid #e5e5e5",
-                      backgroundColor: "#fff",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                    }}
-                  >
-                    ← Back
-                  </button>
-                )}
-                <div>
-                  <h3
-                    style={{
-                      fontSize: 20,
-                      fontWeight: 700,
-                      marginBottom: 4,
-                    }}
-                  >
-                    {selectedConversation.item_title ?? "Conversation"}
-                  </h3>
-                  <p style={{ color: "#666", fontSize: 14, margin: 0 }}>
-                    Conversation ID: {selectedConversation.id}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowTransactionList(true)}
+            {/* Item Card in Header */}
+            {conversationItem && (
+              <Card style={{ marginBottom: 16, border: "1px solid #e5e5e5" }}>
+                <CardContent style={{ padding: 12 }}>
+                  <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                    {/* Item Image */}
+                    <Link to={`/items/${conversationItem.id}`} style={{ textDecoration: "none" }}>
+                      <div
+                        style={{
+                          width: 100,
+                          height: 100,
+                          backgroundColor: "#f5f5f5",
+                          borderRadius: 8,
+                          overflow: "hidden",
+                          flexShrink: 0,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {conversationItem.images?.[0] ? (
+                          <img
+                            src={conversationItem.images[0]}
+                            alt={conversationItem.title}
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <Package style={{ width: 32, height: 32, color: "#999" }} />
+                          </div>
+                        )}
+                      </div>
+                    </Link>
+
+                    {/* Item Details */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Link to={`/items/${conversationItem.id}`} style={{ textDecoration: "none", color: "inherit" }}>
+                        <h3
+                          style={{
+                            fontSize: 18,
+                            fontWeight: 700,
+                            marginBottom: 4,
+                            color: "#111",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {conversationItem.title}
+                        </h3>
+                      </Link>
+                      
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
+                        {conversationItem.status === "reserved" && (
+                          <Badge style={{ backgroundColor: "#fef3c7", color: "#92400e", border: "none" }}>
+                            Reserved
+                          </Badge>
+                        )}
+                        {conversationItem.condition && (
+                          <Badge style={{ backgroundColor: "#f3f4f6", color: "#374151", border: "none" }}>
+                            {conversationItem.condition.replace("_", " ")}
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      <p
+                        style={{
+                          fontSize: 20,
+                          fontWeight: 700,
+                          color: "#dc2626",
+                          margin: "4px 0",
+                        }}
+                      >
+                        ${conversationItem.price}
+                      </p>
+                      
+                      {/* Appointment Info */}
+                      {currentTransaction && currentTransaction.meetup_time && currentTransaction.meetup_place && (
+                        <div style={{ marginTop: 12, padding: 8, backgroundColor: "#f0f9ff", borderRadius: 6, border: "1px solid #bae6fd" }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "#0369a1", marginBottom: 4 }}>
+                            📅 Appointment Scheduled
+                          </div>
+                          <div style={{ fontSize: 12, color: "#0c4a6e", marginBottom: 2 }}>
+                            📍 {currentTransaction.meetup_place}
+                          </div>
+                          <div style={{ fontSize: 12, color: "#0c4a6e" }}>
+                            🕐 {new Date(currentTransaction.meetup_time).toLocaleString('en-US', {
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit',
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Removed Action Buttons - moved to messages header */}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Messages Header with Title and Appointment Buttons */}
+            {selectedConversation && (
+              <div
                 style={{
-                  padding: "6px 12px",
-                  borderRadius: 8,
-                  border: "1px solid #dc2626",
-                  backgroundColor: "#fff",
-                  color: "#dc2626",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  whiteSpace: "nowrap",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 12,
+                  padding: "12px 0",
+                  borderBottom: "1px solid #e5e5e5",
                 }}
               >
-                Transactions {transactions.length > 0 ? `(${transactions.length})` : ""}
-              </button>
-            </div>
+                {/* Left: Conversation Title */}
+                <div style={{ flex: 1 }}>
+                  <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>
+                    Conversation about {conversationItem?.title || "this item"}
+                  </h2>
+                  {selectedConversation && (
+                    <div style={{ fontSize: 13, color: "#666", marginTop: 4 }}>
+                      {(() => {
+                        const otherId = selectedConversation.participant_ids?.find((id) => id !== currentUser?.id);
+                        const otherUser = otherId ? participantUsers[otherId] : null;
+                        return otherUser?.display_name || `User ${otherId?.substring(0, 8)}`;
+                      })()}
+                    </div>
+                  )}
+                </div>
+
+                {/* Right: Appointment Buttons */}
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  {/* Show "Set up appointment" or "Edit appointment" based on whether appointment is set */}
+                  {currentUser && 
+                   conversationItem &&
+                   (conversationItem.status === "available" || conversationItem.status === "reserved") && (
+                    <>
+                      {/* If appointment is not set, show "Set up appointment" */}
+                      {(!currentTransaction || !currentTransaction.meetup_time || !currentTransaction.meetup_place) && (
+                        <button
+                          onClick={() => navigate(`/appointments/${conversationItem.id}${selectedId ? `?conversationId=${selectedId}` : ''}`)}
+                          style={{
+                            padding: "8px 16px",
+                            borderRadius: 8,
+                            border: "none",
+                            backgroundColor: "#dc2626",
+                            color: "#fff",
+                            fontSize: 14,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Set up appointment
+                        </button>
+                      )}
+                      
+                      {/* If appointment is set, show "Edit appointment" and "Complete Transaction" */}
+                      {currentTransaction && currentTransaction.meetup_time && currentTransaction.meetup_place && (
+                        <>
+                          <button
+                            onClick={() => navigate(`/appointments/${conversationItem.id}${selectedId ? `?conversationId=${selectedId}` : ''}`)}
+                            style={{
+                              padding: "8px 16px",
+                              borderRadius: 8,
+                              border: "none",
+                              backgroundColor: "#dc2626",
+                              color: "#fff",
+                              fontSize: 14,
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            Edit appointment
+                          </button>
+                          
+                          <button
+                            onClick={() => navigate(`/transactions/${currentTransaction.id}`)}
+                            style={{
+                              padding: "8px 16px",
+                              borderRadius: 8,
+                              border: "none",
+                              backgroundColor: "#16a34a",
+                              color: "#fff",
+                              fontSize: 14,
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            Complete Transaction
+                          </button>
+                        </>
+                      )}
+                    </>
+                  )}
+                  
+                  <button
+                    onClick={() => setShowTransactionList(true)}
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: 8,
+                      border: "1px solid #dc2626",
+                      backgroundColor: "#fff",
+                      color: "#dc2626",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Transactions {transactions.length > 0 ? `(${transactions.length})` : ""}
+                  </button>
+                  
+                  {isMobile && (
+                    <button
+                      onClick={() => setShowingConversationPane(false)}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 8,
+                        border: "1px solid #e5e5e5",
+                        backgroundColor: "#fff",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        fontSize: 12,
+                      }}
+                    >
+                      ← Back
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Messages list */}
             <div
@@ -896,72 +828,6 @@ export default function Messages() {
                 </div>
               )}
               {messages.map((m) => {
-                // Check if this is a buy request message
-                const isBuyRequestMessage = m.message_type === "buy_request" && m.buy_request_id;
-                const buyRequest = isBuyRequestMessage 
-                  ? buyRequests.find(br => br.id === m.buy_request_id)
-                  : null;
-                
-                if (isBuyRequestMessage && buyRequest) {
-                  // Render buy request message
-                  return (
-                    <BuyRequestMessageComponent
-                      key={m.id}
-                      message={m}
-                      buyRequest={buyRequest}
-                      currentUser={currentUser}
-                      transactions={transactions}
-                      onAccept={async () => {
-                        try {
-                          const result = await BuyRequest.accept(buyRequest.id!);
-                          // Reload buy requests and transactions
-                          const [updatedRequests, updatedTxs] = await Promise.all([
-                            BuyRequest.getByConversation(selectedId!),
-                            Transaction.getAllByConversation(selectedId!),
-                          ]);
-                          setBuyRequests(updatedRequests);
-                          setTransactions(updatedTxs);
-                          // Reload messages to show acceptance message
-                          const result_messages = await MessageEntity.getMessages(selectedId!);
-                          setMessages(result_messages ?? []);
-                          // Navigate to transaction page
-                          setTimeout(() => {
-                            navigate(`/transactions/${result.transaction.id}`);
-                          }, 500);
-                        } catch (error: any) {
-                          alert(error.message || "Failed to accept request");
-                        }
-                      }}
-                      onReject={async () => {
-                        try {
-                          await BuyRequest.reject(buyRequest.id!);
-                          // Reload buy requests
-                          const updated = await BuyRequest.getByConversation(selectedId!);
-                          setBuyRequests(updated);
-                          // Reload messages to show rejection message
-                          const result_messages = await MessageEntity.getMessages(selectedId!);
-                          setMessages(result_messages ?? []);
-                        } catch (error: any) {
-                          alert(error.message || "Failed to reject request");
-                        }
-                      }}
-                      onCancel={async () => {
-                        try {
-                          await BuyRequest.cancel(buyRequest.id!);
-                          // Reload buy requests
-                          const updated = await BuyRequest.getByConversation(selectedId!);
-                          setBuyRequests(updated);
-                          // Reload messages
-                          const result_messages = await MessageEntity.getMessages(selectedId!);
-                          setMessages(result_messages ?? []);
-                        } catch (error: any) {
-                          alert(error.message || "Failed to cancel request");
-                        }
-                      }}
-                    />
-                  );
-                }
-                
                 // Regular message rendering
                 return (
                   <div

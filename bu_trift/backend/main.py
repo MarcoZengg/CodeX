@@ -21,6 +21,10 @@ from sqlalchemy.exc import SQLAlchemyError
 
 # NEW: import Firebase auth verification
 from auth import verify_token
+# NEW: import dependencies for reusable authentication
+from dependencies import get_current_user
+# NEW: import database utilities
+from utils.db_utils import get_or_404
 
 # Ensure firebase_admin initializes
 import firebase_config  # noqa: F401
@@ -142,18 +146,20 @@ class UserResponse(BaseModel):
 class ConversationCreate(BaseModel):
     participant1_id: str  # Current user
     participant2_id: str  # Other user
-    item_id: Optional[str] = None  # Optional: item being discussed
+    item_id: str  # Required: item being discussed (one conversation per item)
 
 class ConversationResponse(BaseModel):
     id: str
     participant1_id: str
     participant2_id: str
-    item_id: Optional[str]
+    item_id: str  # Required: item being discussed
     last_message_at: Optional[str]
     created_date: str
     updated_date: str
     last_message_snippet: Optional[str] = None
     unread_count: int = 0
+    item_title: Optional[str] = None  # For UI display
+    item_image_url: Optional[str] = None  # For UI display
 
 # Message Pydantic models
 class MessageCreate(BaseModel):
@@ -318,6 +324,16 @@ def conversation_to_response(
             .count()
         )
 
+    # Get item details for UI display
+    item_title = None
+    item_image_url = None
+    if db and conversation.item_id:
+        item = db.query(ItemDB).filter(ItemDB.id == conversation.item_id).first()
+        if item:
+            item_title = item.title
+            if item.images and len(item.images) > 0:
+                item_image_url = item.images[0]
+    
     return {
         "id": conversation.id,
         "participant1_id": conversation.participant1_id,
@@ -328,6 +344,8 @@ def conversation_to_response(
         "updated_date": conversation.updated_date.isoformat() if conversation.updated_date else datetime.now().isoformat(),
         "last_message_snippet": last_message_snippet,
         "unread_count": unread_count,
+        "item_title": item_title,
+        "item_image_url": item_image_url,
     }
 
 
@@ -424,11 +442,12 @@ def validate_bu_email(email: str) -> bool:
 @app.post("/api/upload-image")
 async def upload_image(
     file: UploadFile = File(...),
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection - authenticated users only
 ):
     """
     Upload an image file to Cloudinary.
     Returns the public URL of the uploaded file.
+    Only authenticated users can upload images.
     """
     # Validate file type
     allowed_extensions = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
@@ -514,27 +533,19 @@ def get_items(
 
 @app.get("/api/items/{item_id}", response_model=ItemResponse)
 def get_item(item_id: str, db: Session = Depends(get_db)):
-    item = db.query(ItemDB).filter(ItemDB.id == item_id).first()
-    if not item:
-        raise HTTPException(404, "Item not found")
+    item = get_or_404(ItemDB, item_id, db, "Item not found")
     return item_to_response(item)
 
 
 @app.post("/api/items", response_model=ItemResponse)
 def create_item(
     item: ItemCreate,
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     # Validate price
     if item.price <= 0:
         raise HTTPException(status_code=400, detail="Price must be greater than 0")
-    
-    firebase_uid = token_data["uid"]
-
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not user:
-        raise HTTPException(404, "User not found")
 
     try:
         new_item = ItemDB(
@@ -565,20 +576,13 @@ def create_item(
 def update_item(
     item_id: str,
     updates: ItemUpdate,
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """
     Update an existing item listing. Only the seller can update their own listing.
     """
-    firebase_uid = token_data["uid"]
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    item = db.query(ItemDB).filter(ItemDB.id == item_id).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="Item not found")
+    item = get_or_404(ItemDB, item_id, db, "Item not found")
 
     if item.seller_id != user.id:
         raise HTTPException(status_code=403, detail="You can only edit your own listings")
@@ -616,7 +620,7 @@ def update_item(
 def update_item_status(
     item_id: str,
     status_update: ItemStatusUpdate,
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Update item status (available/sold/reserved). Only the seller can update."""
@@ -627,14 +631,7 @@ def update_item_status(
             detail=f"Invalid status. Allowed: {', '.join(sorted(allowed_statuses))}"
         )
 
-    firebase_uid = token_data["uid"]
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not user:
-        raise HTTPException(404, "User not found")
-
-    item = db.query(ItemDB).filter(ItemDB.id == item_id).first()
-    if not item:
-        raise HTTPException(404, "Item not found")
+    item = get_or_404(ItemDB, item_id, db, "Item not found")
 
     if item.seller_id != user.id:
         raise HTTPException(status_code=403, detail="You can only update your own listings")
@@ -652,20 +649,13 @@ def update_item_status(
 @app.delete("/api/items/{item_id}")
 def delete_item(
     item_id: str,
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """
     Delete an item listing. Only the seller who created the item can delete it.
     """
-    firebase_uid = token_data["uid"]
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    item = db.query(ItemDB).filter(ItemDB.id == item_id).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="Item not found")
+    item = get_or_404(ItemDB, item_id, db, "Item not found")
 
     if item.seller_id != user.id:
         raise HTTPException(status_code=403, detail="You can only remove your own listings")
@@ -726,31 +716,21 @@ def create_profile(
 
 
 @app.get("/api/users/me", response_model=UserResponse)
-def get_current_user(
-    token_data: dict = Depends(verify_token),
+def get_current_user_endpoint(
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
-    firebase_uid = token_data["uid"]
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-
-    if not user:
-        raise HTTPException(404, "User not found")
-
+    """Get current authenticated user's profile"""
     return user_to_response(user)
 
 
 @app.put("/api/users/me", response_model=UserResponse)
 def update_current_user(
     user_update: UserUpdate,
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Update current authenticated user's profile"""
-    firebase_uid = token_data["uid"]
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-
-    if not user:
-        raise HTTPException(404, "User not found")
 
     try:
         if user_update.display_name is not None:
@@ -772,23 +752,18 @@ def update_current_user(
 @app.post("/api/users/complete-profile")
 def complete_profile(
     profile_data: CompleteProfileRequest,
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """
     Complete user profile after Google sign-up.
     Sets password in Firebase and updates display_name/bio in database.
     """
-    firebase_uid = token_data["uid"]
+    firebase_uid = user.firebase_uid  # Get firebase_uid from user object
     
     # Validate password
     if len(profile_data.password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters long")
-    
-    # Get user from database
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not user:
-        raise HTTPException(404, "User not found")
     
     try:
         # Set password in Firebase using Admin SDK
@@ -820,19 +795,14 @@ def complete_profile(
 
 @app.delete("/api/users/me")
 def delete_current_user(
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """
     Delete current user's account.
     Deletes from both Firebase and backend database (including all related data).
     """
-    firebase_uid = token_data["uid"]
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    
-    if not user:
-        raise HTTPException(404, "User not found")
-    
+    firebase_uid = user.firebase_uid  # Get firebase_uid from user object
     user_id = user.id
     
     try:
@@ -885,9 +855,7 @@ def delete_current_user(
 
 @app.get("/api/users/{user_id}", response_model=UserResponse)
 def get_user_profile(user_id: str, db: Session = Depends(get_db)):
-    user = db.query(UserDB).filter(UserDB.id == user_id).first()
-    if not user:
-        raise HTTPException(404, "User not found")
+    user = get_or_404(UserDB, user_id, db, "User not found")
     return user_to_response(user)
 
 # ==========================
@@ -968,34 +936,34 @@ manager = ConnectionManager()
 # WebSocket Endpoint
 # ==========================
 
-async def verify_websocket_token(token: str) -> Optional[dict]:
-    """Verify Firebase token from WebSocket connection"""
-    try:
-        from firebase_admin import auth as firebase_auth
-        decoded = firebase_auth.verify_id_token(token)
-        return decoded
-    except Exception as e:
-        logger.error(f"WebSocket token verification failed: {e}")
-        return None
-
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(
     websocket: WebSocket,
     user_id: str,
     token: str = Query(..., description="Firebase authentication token")
 ):
-    """WebSocket endpoint for real-time messaging with authentication"""
+    """WebSocket endpoint for real-time messaging with authentication
+    
+    Note: WebSocket endpoints cannot use FastAPI dependencies directly,
+    so we use utility functions from utils.websocket_auth for authentication.
+    """
+    # Import WebSocket auth utilities (can't use FastAPI dependencies for WebSocket)
+    from utils.websocket_auth import verify_websocket_token, get_user_from_firebase_uid
+    
     # Verify token from query parameter
     token_data = await verify_websocket_token(token)
     if not token_data:
         await websocket.close(code=1008, reason="Invalid authentication token")
         return
     
-    # Verify user_id matches token
+    # Verify user_id matches token - use a short-lived database session
+    # CRITICAL: Close session immediately after authentication to prevent connection pool exhaustion
     from database import SessionLocal
     db = SessionLocal()
+    user = None
     try:
-        user = db.query(UserDB).filter(UserDB.firebase_uid == token_data["uid"]).first()
+        # Use helper function to reduce duplication
+        user = get_user_from_firebase_uid(token_data["uid"], db)
         if not user:
             await websocket.close(code=1008, reason="User not found")
             return
@@ -1003,19 +971,23 @@ async def websocket_endpoint(
         if user.id != user_id:
             await websocket.close(code=1008, reason="User ID mismatch")
             return
-        
-        await manager.connect(websocket, user_id)
-        try:
-            while True:
-                # Keep connection alive and listen for messages
-                # You can handle incoming WebSocket messages here if needed
-                data = await websocket.receive_text()
-                # Optional: Process incoming messages from client
-                # For now, we just keep the connection alive
-        except WebSocketDisconnect:
-            manager.disconnect(websocket, user_id)
     finally:
+        # IMPORTANT: Always close database session immediately after authentication
+        # Don't keep it open for the entire WebSocket connection lifetime
+        # This prevents connection pool exhaustion when multiple WebSocket connections exist
         db.close()
+    
+    # Now connect to WebSocket (no database session needed for connection lifetime)
+    await manager.connect(websocket, user_id)
+    try:
+        while True:
+            # Keep connection alive and listen for messages
+            # You can handle incoming WebSocket messages here if needed
+            data = await websocket.receive_text()
+            # Optional: Process incoming messages from client
+            # For now, we just keep the connection alive
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, user_id)
 
 # ==========================
 # Messaging Endpoints
@@ -1025,39 +997,42 @@ async def websocket_endpoint(
 @app.post("/api/conversations", response_model=ConversationResponse)
 def create_conversation(
     conversation: ConversationCreate,
-    token_data: dict = Depends(verify_token),
+    current_user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Create a new conversation between two users"""
-    
-    firebase_uid = token_data["uid"]
-    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not current_user:
-        raise HTTPException(status_code=404, detail="User not found")
     
     # Verify that current user is participant1_id
     if conversation.participant1_id != current_user.id:
         raise HTTPException(status_code=403, detail="You can only create conversations as yourself")
     
     # Verify that participant2 exists
-    participant2 = db.query(UserDB).filter(UserDB.id == conversation.participant2_id).first()
-    if not participant2:
-        raise HTTPException(status_code=404, detail="Other participant not found")
+    participant2 = get_or_404(UserDB, conversation.participant2_id, db, "Other participant not found")
     
     # Prevent self-conversations
     if conversation.participant1_id == conversation.participant2_id:
         raise HTTPException(status_code=400, detail="Cannot create conversation with yourself")
     
-    # Check if conversation already exists between these two users
+    # Validate item_id is provided
+    if not conversation.item_id:
+        raise HTTPException(status_code=400, detail="item_id is required for item-specific conversations")
+    
+    # Verify item exists
+    item = get_or_404(ItemDB, conversation.item_id, db, "Item not found")
+    
+    # Check if conversation already exists for THIS specific item + participants
     existing = db.query(ConversationDB).filter(
-        ((ConversationDB.participant1_id == conversation.participant1_id) &
-         (ConversationDB.participant2_id == conversation.participant2_id)) |
-        ((ConversationDB.participant1_id == conversation.participant2_id) &
-         (ConversationDB.participant2_id == conversation.participant1_id))
+        ConversationDB.item_id == conversation.item_id,  # Item-specific check
+        (
+            ((ConversationDB.participant1_id == conversation.participant1_id) &
+             (ConversationDB.participant2_id == conversation.participant2_id)) |
+            ((ConversationDB.participant1_id == conversation.participant2_id) &
+             (ConversationDB.participant2_id == conversation.participant1_id))
+        )
     ).first()
     
     if existing:
-        # Return existing conversation instead of creating duplicate
+        # Return existing conversation for this item instead of creating duplicate
         return conversation_to_response(existing, current_user_id=current_user.id, db=db)
     
     try:
@@ -1081,15 +1056,10 @@ def create_conversation(
 @app.get("/api/conversations", response_model=List[ConversationResponse])
 def get_conversations(
     user_id: str,
-    token_data: dict = Depends(verify_token),
+    current_user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Get all conversations for a specific user"""
-    firebase_uid = token_data["uid"]
-    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not current_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
     # Verify that user can only access their own conversations
     if user_id != current_user.id:
         raise HTTPException(status_code=403, detail="You can only access your own conversations")
@@ -1104,18 +1074,11 @@ def get_conversations(
 @app.get("/api/conversations/{conversation_id}", response_model=ConversationResponse)
 def get_conversation(
     conversation_id: str,
-    token_data: dict = Depends(verify_token),
+    current_user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Get a specific conversation by ID"""
-    firebase_uid = token_data["uid"]
-    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not current_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversation = get_or_404(ConversationDB, conversation_id, db, "Conversation not found")
     
     # Verify user is a participant
     if current_user.id not in [conversation.participant1_id, conversation.participant2_id]:
@@ -1127,18 +1090,11 @@ def get_conversation(
 def update_conversation(
     conversation_id: str,
     item_id: Optional[str] = None,
-    token_data: dict = Depends(verify_token),
+    current_user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db)
 ):
     """Update conversation (e.g., update item_id or last_message_at)"""
-    firebase_uid = token_data["uid"]
-    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not current_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversation = get_or_404(ConversationDB, conversation_id, db, "Conversation not found")
     
     # Verify user is a participant
     if current_user.id not in [conversation.participant1_id, conversation.participant2_id]:
@@ -1158,18 +1114,11 @@ def update_conversation(
 @app.delete("/api/conversations/{conversation_id}")
 def delete_conversation(
     conversation_id: str,
-    token_data: dict = Depends(verify_token),
+    current_user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db)
 ):
     """Delete a conversation and all its messages"""
-    firebase_uid = token_data["uid"]
-    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not current_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversation = get_or_404(ConversationDB, conversation_id, db, "Conversation not found")
     
     # Verify user is a participant
     if current_user.id not in [conversation.participant1_id, conversation.participant2_id]:
@@ -1187,7 +1136,7 @@ def delete_conversation(
 @app.post("/api/messages", response_model=MessageResponse)
 async def create_message(
     message: MessageCreate,
-    token_data: dict = Depends(verify_token),
+    current_user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Create a new message in a conversation and broadcast via WebSocket"""
@@ -1199,19 +1148,12 @@ async def create_message(
     if len(content) > 5000:
         raise HTTPException(status_code=400, detail="Message content cannot exceed 5000 characters")
     
-    firebase_uid = token_data["uid"]
-    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not current_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
     # Verify sender is authenticated user
     if message.sender_id != current_user.id:
         raise HTTPException(status_code=403, detail="You can only send messages as yourself")
     
     # Verify conversation exists
-    conversation = db.query(ConversationDB).filter(ConversationDB.id == message.conversation_id).first()
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversation = get_or_404(ConversationDB, message.conversation_id, db, "Conversation not found")
     
     # Verify sender is a participant
     if message.sender_id not in [conversation.participant1_id, conversation.participant2_id]:
@@ -1257,19 +1199,12 @@ async def create_message(
 @app.get("/api/messages", response_model=List[MessageResponse])
 def get_messages(
     conversation_id: str,
-    token_data: dict = Depends(verify_token),
+    current_user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Get all messages in a conversation"""
-    firebase_uid = token_data["uid"]
-    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not current_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
     # Verify conversation exists
-    conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversation = get_or_404(ConversationDB, conversation_id, db, "Conversation not found")
     
     # Verify user is a participant
     if current_user.id not in [conversation.participant1_id, conversation.participant2_id]:
@@ -1284,18 +1219,11 @@ def get_messages(
 @app.get("/api/messages/{message_id}", response_model=MessageResponse)
 def get_message(
     message_id: str,
-    token_data: dict = Depends(verify_token),
+    current_user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db)
 ):
     """Get a specific message by ID"""
-    firebase_uid = token_data["uid"]
-    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not current_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    message = db.query(MessageDB).filter(MessageDB.id == message_id).first()
-    if not message:
-        raise HTTPException(status_code=404, detail="Message not found")
+    message = get_or_404(MessageDB, message_id, db, "Message not found")
     
     # Verify user is a participant in the conversation
     conversation = db.query(ConversationDB).filter(ConversationDB.id == message.conversation_id).first()
@@ -1308,18 +1236,11 @@ def get_message(
 def update_message(
     message_id: str,
     message_update: MessageUpdate,
-    token_data: dict = Depends(verify_token),
+    current_user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db)
 ):
     """Update a message (e.g., mark as read)"""
-    firebase_uid = token_data["uid"]
-    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not current_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    message = db.query(MessageDB).filter(MessageDB.id == message_id).first()
-    if not message:
-        raise HTTPException(status_code=404, detail="Message not found")
+    message = get_or_404(MessageDB, message_id, db, "Message not found")
     
     # Verify user is a participant in the conversation
     conversation = db.query(ConversationDB).filter(ConversationDB.id == message.conversation_id).first()
@@ -1341,23 +1262,16 @@ def update_message(
 def mark_conversation_read(
     conversation_id: str,
     user_id: str,
-    token_data: dict = Depends(verify_token),
+    current_user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Mark all messages in a conversation as read for a specific user"""
-    firebase_uid = token_data["uid"]
-    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not current_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
     # Verify user_id matches authenticated user
     if user_id != current_user.id:
         raise HTTPException(status_code=403, detail="You can only mark your own messages as read")
     
     # Verify conversation exists and user is a participant
-    conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversation = get_or_404(ConversationDB, conversation_id, db, "Conversation not found")
     
     if current_user.id not in [conversation.participant1_id, conversation.participant2_id]:
         raise HTTPException(status_code=403, detail="You are not a participant in this conversation")
@@ -1381,18 +1295,11 @@ def mark_conversation_read(
 @app.delete("/api/messages/{message_id}")
 def delete_message(
     message_id: str,
-    token_data: dict = Depends(verify_token),
+    current_user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db)
 ):
     """Delete a message"""
-    firebase_uid = token_data["uid"]
-    current_user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not current_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    message = db.query(MessageDB).filter(MessageDB.id == message_id).first()
-    if not message:
-        raise HTTPException(status_code=404, detail="Message not found")
+    message = get_or_404(MessageDB, message_id, db, "Message not found")
     
     # Only allow sender to delete their own messages
     if message.sender_id != current_user.id:
@@ -1413,18 +1320,11 @@ def delete_message(
 @app.post("/api/buy-requests", response_model=BuyRequestResponse)
 async def create_buy_request(
     request_data: BuyRequestCreate,
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Create a buy request for an item. Creates conversation if it doesn't exist."""
-    firebase_uid = token_data["uid"]
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not user:
-        raise HTTPException(404, "User not found")
-    
-    item = db.query(ItemDB).filter(ItemDB.id == request_data.item_id).first()
-    if not item:
-        raise HTTPException(404, "Item not found")
+    item = get_or_404(ItemDB, request_data.item_id, db, "Item not found")
     
     if item.seller_id == user.id:
         raise HTTPException(status_code=400, detail="You cannot request to buy your own item")
@@ -1443,20 +1343,42 @@ async def create_buy_request(
     
     try:
         conversation_id = request_data.conversation_id
+        
+        # If conversation_id is provided, validate it matches this item
+        if conversation_id:
+            existing_conv = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
+            if existing_conv:
+                # Validate the conversation is for THIS item
+                if existing_conv.item_id != item.id:
+                    # Conversation is for a different item - ignore it and create/find the correct one
+                    conversation_id = None
+                else:
+                    # Validate participants match
+                    if not ((existing_conv.participant1_id == user.id and existing_conv.participant2_id == item.seller_id) or
+                            (existing_conv.participant1_id == item.seller_id and existing_conv.participant2_id == user.id)):
+                        # Participants don't match - ignore it
+                        conversation_id = None
+        
+        # Find or create conversation for THIS specific item
         if not conversation_id:
+            # Find conversation for THIS specific item + participants
             existing_conv = db.query(ConversationDB).filter(
-                ((ConversationDB.participant1_id == user.id) & (ConversationDB.participant2_id == item.seller_id)) |
-                ((ConversationDB.participant1_id == item.seller_id) & (ConversationDB.participant2_id == user.id))
+                ConversationDB.item_id == item.id,  # Item-specific check
+                (
+                    ((ConversationDB.participant1_id == user.id) & (ConversationDB.participant2_id == item.seller_id)) |
+                    ((ConversationDB.participant1_id == item.seller_id) & (ConversationDB.participant2_id == user.id))
+                )
             ).first()
             
             if existing_conv:
                 conversation_id = existing_conv.id
             else:
+                # Create new conversation for this specific item
                 new_conv = ConversationDB(
                     id=str(uuid.uuid4()),
                     participant1_id=user.id,
                     participant2_id=item.seller_id,
-                    item_id=item.id,
+                    item_id=item.id,  # Required: item-specific
                 )
                 db.add(new_conv)
                 db.flush()
@@ -1527,18 +1449,11 @@ async def create_buy_request(
 @app.patch("/api/buy-requests/{request_id}/accept")
 async def accept_buy_request(
     request_id: str,
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Accept a buy request and automatically create a transaction."""
-    firebase_uid = token_data["uid"]
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not user:
-        raise HTTPException(404, "User not found")
-    
-    buy_request = db.query(BuyRequestDB).filter(BuyRequestDB.id == request_id).first()
-    if not buy_request:
-        raise HTTPException(404, "Buy request not found")
+    buy_request = get_or_404(BuyRequestDB, request_id, db, "Buy request not found")
     
     if buy_request.seller_id != user.id:
         raise HTTPException(status_code=403, detail="Only the seller can accept buy requests")
@@ -1546,9 +1461,7 @@ async def accept_buy_request(
     if buy_request.status != "pending":
         raise HTTPException(status_code=400, detail=f"Buy request is already {buy_request.status}")
     
-    item = db.query(ItemDB).filter(ItemDB.id == buy_request.item_id).first()
-    if not item:
-        raise HTTPException(404, "Item not found")
+    item = get_or_404(ItemDB, buy_request.item_id, db, "Item not found")
     
     if item.status != "available":
         raise HTTPException(status_code=400, detail=f"Item is {item.status} and cannot be purchased")
@@ -1636,18 +1549,11 @@ async def accept_buy_request(
 @app.patch("/api/buy-requests/{request_id}/reject", response_model=BuyRequestResponse)
 async def reject_buy_request(
     request_id: str,
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Reject a buy request."""
-    firebase_uid = token_data["uid"]
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not user:
-        raise HTTPException(404, "User not found")
-    
-    buy_request = db.query(BuyRequestDB).filter(BuyRequestDB.id == request_id).first()
-    if not buy_request:
-        raise HTTPException(404, "Buy request not found")
+    buy_request = get_or_404(BuyRequestDB, request_id, db, "Buy request not found")
     
     if buy_request.seller_id != user.id:
         raise HTTPException(status_code=403, detail="Only the seller can reject buy requests")
@@ -1687,18 +1593,11 @@ async def reject_buy_request(
 @app.patch("/api/buy-requests/{request_id}/cancel", response_model=BuyRequestResponse)
 async def cancel_buy_request(
     request_id: str,
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Cancel a buy request (buyer only)."""
-    firebase_uid = token_data["uid"]
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not user:
-        raise HTTPException(404, "User not found")
-    
-    buy_request = db.query(BuyRequestDB).filter(BuyRequestDB.id == request_id).first()
-    if not buy_request:
-        raise HTTPException(404, "Buy request not found")
+    buy_request = get_or_404(BuyRequestDB, request_id, db, "Buy request not found")
     
     if buy_request.buyer_id != user.id:
         raise HTTPException(status_code=403, detail="Only the buyer can cancel buy requests")
@@ -1732,24 +1631,20 @@ async def cancel_buy_request(
 @app.get("/api/buy-requests/by-conversation/{conversation_id}", response_model=List[BuyRequestResponse])
 def get_buy_requests_by_conversation(
     conversation_id: str,
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Get all buy requests for a conversation."""
-    firebase_uid = token_data["uid"]
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not user:
-        raise HTTPException(404, "User not found")
-    
-    conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
-    if not conversation:
-        raise HTTPException(404, "Conversation not found")
+    conversation = get_or_404(ConversationDB, conversation_id, db, "Conversation not found")
     
     if user.id not in [conversation.participant1_id, conversation.participant2_id]:
         raise HTTPException(status_code=403, detail="You can only view buy requests for your own conversations")
     
+    # Only return buy requests that match the conversation's item_id
+    # This ensures item-specific conversations only show relevant buy requests
     requests = db.query(BuyRequestDB).filter(
-        BuyRequestDB.conversation_id == conversation_id
+        BuyRequestDB.conversation_id == conversation_id,
+        BuyRequestDB.item_id == conversation.item_id  # Filter by conversation's item_id
     ).order_by(BuyRequestDB.created_date.desc()).all()
     
     return [buy_request_to_response(req) for req in requests]
@@ -1757,18 +1652,11 @@ def get_buy_requests_by_conversation(
 @app.get("/api/buy-requests/{request_id}", response_model=BuyRequestResponse)
 def get_buy_request(
     request_id: str,
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Get a specific buy request."""
-    firebase_uid = token_data["uid"]
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not user:
-        raise HTTPException(404, "User not found")
-    
-    buy_request = db.query(BuyRequestDB).filter(BuyRequestDB.id == request_id).first()
-    if not buy_request:
-        raise HTTPException(404, "Buy request not found")
+    buy_request = get_or_404(BuyRequestDB, request_id, db, "Buy request not found")
     
     if user.id not in [buy_request.buyer_id, buy_request.seller_id]:
         raise HTTPException(status_code=403, detail="You can only view your own buy requests")
@@ -1782,39 +1670,181 @@ def get_buy_request(
 @app.get("/api/transactions/{transaction_id}", response_model=TransactionResponse)
 def get_transaction(
     transaction_id: str,
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Get a specific transaction."""
-    firebase_uid = token_data["uid"]
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not user:
-        raise HTTPException(404, "User not found")
-    
-    transaction = db.query(TransactionDB).filter(TransactionDB.id == transaction_id).first()
-    if not transaction:
-        raise HTTPException(404, "Transaction not found")
+    transaction = get_or_404(TransactionDB, transaction_id, db, "Transaction not found")
     
     if user.id not in [transaction.buyer_id, transaction.seller_id]:
         raise HTTPException(status_code=403, detail="You can only view your own transactions")
     
     return transaction_to_response(transaction)
 
+@app.post("/api/transactions/create-with-appointment", response_model=TransactionResponse)
+async def create_transaction_with_appointment(
+    request_data: dict,
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
+    db: Session = Depends(get_db),
+):
+    """Create a transaction directly with appointment details (no buy request needed)."""
+    item_id = request_data.get("item_id")
+    conversation_id = request_data.get("conversation_id")
+    meetup_place = request_data.get("meetup_place")
+    meetup_time = request_data.get("meetup_time")
+    
+    if not item_id or not conversation_id:
+        raise HTTPException(status_code=400, detail="item_id and conversation_id are required")
+    
+    if not meetup_place or not meetup_time:
+        raise HTTPException(status_code=400, detail="meetup_place and meetup_time are required")
+    
+    # Verify item exists
+    item = get_or_404(ItemDB, item_id, db, "Item not found")
+    
+    # Verify conversation exists and user is participant
+    conversation = get_or_404(ConversationDB, conversation_id, db, "Conversation not found")
+    
+    if user.id not in [conversation.participant1_id, conversation.participant2_id]:
+        raise HTTPException(status_code=403, detail="You must be a participant in this conversation")
+    
+    if conversation.item_id != item_id:
+        raise HTTPException(status_code=400, detail="Conversation is not for this item")
+    
+    # Determine if user is buyer or seller
+    is_seller = user.id == item.seller_id
+    is_buyer = user.id != item.seller_id
+    
+    if not is_seller and not is_buyer:
+        raise HTTPException(status_code=403, detail="You must be either the buyer or seller for this item")
+    
+    # Check if transaction already exists for this conversation and item
+    existing_transaction = db.query(TransactionDB).filter(
+        TransactionDB.conversation_id == conversation_id,
+        TransactionDB.item_id == item_id,
+        TransactionDB.status == "in_progress"
+    ).first()
+    
+    try:
+        # Parse meetup time
+        meetup_datetime = datetime.fromisoformat(meetup_time.replace('Z', '+00:00'))
+        
+        if existing_transaction:
+            # Update existing transaction with appointment details
+            if user.id not in [existing_transaction.buyer_id, existing_transaction.seller_id]:
+                raise HTTPException(status_code=403, detail="You are not authorized to update this transaction")
+            
+            existing_transaction.meetup_time = meetup_datetime
+            existing_transaction.meetup_place = meetup_place
+            
+            # Update conversation timestamp
+            conversation.last_message_at = datetime.now()
+            
+            db.commit()
+            db.refresh(existing_transaction)
+            
+            # Broadcast transaction update via WebSocket
+            transaction_response = transaction_to_response(existing_transaction)
+            await manager.broadcast_to_transaction(
+                {
+                    "type": "transaction_update",
+                    "data": pydantic_to_dict(transaction_response)
+                },
+                existing_transaction.id,
+                user.id,
+                db
+            )
+            
+            await manager.broadcast_to_conversation(
+                {
+                    "type": "transaction_update",
+                    "data": pydantic_to_dict(transaction_response)
+                },
+                conversation_id,
+                user.id,
+                db
+            )
+            
+            return transaction_response
+        else:
+            # Create new transaction with appointment details
+            if item.status != "available":
+                raise HTTPException(status_code=400, detail=f"Item is {item.status} and cannot be purchased")
+            
+            # Determine buyer and seller
+            buyer_id = user.id if is_buyer else None
+            seller_id = user.id if is_seller else item.seller_id
+            
+            # If seller is setting up, we need to find the other participant as buyer
+            if is_seller:
+                # The other participant in conversation is the buyer
+                buyer_id = conversation.participant1_id if conversation.participant1_id != user.id else conversation.participant2_id
+                seller_id = user.id
+            else:
+                # Buyer is setting up
+                buyer_id = user.id
+                seller_id = item.seller_id
+            
+            transaction = TransactionDB(
+                id=str(uuid.uuid4()),
+                item_id=item_id,
+                buyer_id=buyer_id,
+                seller_id=seller_id,
+                conversation_id=conversation_id,
+                buy_request_id=None,  # No buy request needed
+                status="in_progress",
+                buyer_confirmed=False,
+                seller_confirmed=False,
+                meetup_time=meetup_datetime,
+                meetup_place=meetup_place,
+            )
+            
+            db.add(transaction)
+            item.status = "reserved"
+            
+            # Update conversation timestamp
+            conversation.last_message_at = datetime.now()
+            
+            db.commit()
+            db.refresh(transaction)
+            
+            # Broadcast transaction creation via WebSocket
+            transaction_response = transaction_to_response(transaction)
+            await manager.broadcast_to_transaction(
+                {
+                    "type": "transaction_created",
+                    "data": pydantic_to_dict(transaction_response)
+                },
+                transaction.id,
+                user.id,
+                db
+            )
+            
+            # Also broadcast to conversation
+            await manager.broadcast_to_conversation(
+                {
+                    "type": "transaction_created",
+                    "data": pydantic_to_dict(transaction_response)
+                },
+                conversation_id,
+                user.id,
+                db
+            )
+            
+            return transaction_response
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating transaction with appointment: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create transaction: {str(e)}")
+
 @app.get("/api/transactions/by-conversation/{conversation_id}/all", response_model=List[TransactionResponse])
 def get_all_transactions_by_conversation(
     conversation_id: str,
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Get all transactions for a conversation."""
-    firebase_uid = token_data["uid"]
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not user:
-        raise HTTPException(404, "User not found")
-    
-    conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
-    if not conversation:
-        raise HTTPException(404, "Conversation not found")
+    conversation = get_or_404(ConversationDB, conversation_id, db, "Conversation not found")
     
     if user.id not in [conversation.participant1_id, conversation.participant2_id]:
         raise HTTPException(status_code=403, detail="You can only view transactions for your own conversations")
@@ -1829,18 +1859,11 @@ def get_all_transactions_by_conversation(
 async def update_transaction(
     transaction_id: str,
     update_data: TransactionUpdate,
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Update a transaction (confirmations, meetup details)."""
-    firebase_uid = token_data["uid"]
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not user:
-        raise HTTPException(404, "User not found")
-    
-    transaction = db.query(TransactionDB).filter(TransactionDB.id == transaction_id).first()
-    if not transaction:
-        raise HTTPException(404, "Transaction not found")
+    transaction = get_or_404(TransactionDB, transaction_id, db, "Transaction not found")
     
     if user.id not in [transaction.buyer_id, transaction.seller_id]:
         raise HTTPException(status_code=403, detail="You can only update your own transactions")
@@ -1896,6 +1919,34 @@ async def update_transaction(
             seller = db.query(UserDB).filter(UserDB.id == transaction.seller_id).first()
             if seller:
                 seller.total_sales += 1
+            
+            # Cancel all other in-progress transactions for this item
+            other_transactions = db.query(TransactionDB).filter(
+                TransactionDB.item_id == transaction.item_id,
+                TransactionDB.id != transaction.id,
+                TransactionDB.status == "in_progress"
+            ).all()
+            
+            for other_tx in other_transactions:
+                other_tx.status = "cancelled"
+                other_tx.completed_date = datetime.now()
+                
+                # Cancel associated buy request
+                if other_tx.buy_request_id:
+                    buy_req = db.query(BuyRequestDB).filter(BuyRequestDB.id == other_tx.buy_request_id).first()
+                    if buy_req and buy_req.status == "accepted":
+                        buy_req.status = "cancelled"
+                        buy_req.responded_date = datetime.now()
+            
+            # Reject all pending buy requests for this item
+            pending_requests = db.query(BuyRequestDB).filter(
+                BuyRequestDB.item_id == transaction.item_id,
+                BuyRequestDB.status == "pending"
+            ).all()
+            
+            for req in pending_requests:
+                req.status = "rejected"
+                req.responded_date = datetime.now()
         
         # Check if both parties confirmed cancellation
         if transaction.buyer_cancel_confirmed and transaction.seller_cancel_confirmed and transaction.status == "in_progress":
@@ -1949,18 +2000,11 @@ async def update_transaction(
 @app.patch("/api/transactions/{transaction_id}/cancel", response_model=TransactionResponse)
 async def cancel_transaction(
     transaction_id: str,
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Cancel a transaction."""
-    firebase_uid = token_data["uid"]
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not user:
-        raise HTTPException(404, "User not found")
-    
-    transaction = db.query(TransactionDB).filter(TransactionDB.id == transaction_id).first()
-    if not transaction:
-        raise HTTPException(404, "Transaction not found")
+    transaction = get_or_404(TransactionDB, transaction_id, db, "Transaction not found")
     
     if user.id not in [transaction.buyer_id, transaction.seller_id]:
         raise HTTPException(status_code=403, detail="You can only cancel your own transactions")
@@ -2023,19 +2067,12 @@ async def cancel_transaction(
 @app.post("/api/reviews", response_model=ReviewResponse)
 def create_review(
     review_data: ReviewCreate,
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Create a review for a completed transaction. Buyer reviews seller, seller reviews buyer."""
-    firebase_uid = token_data["uid"]
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not user:
-        raise HTTPException(404, "User not found")
-    
     # Verify transaction exists and is completed
-    transaction = db.query(TransactionDB).filter(TransactionDB.id == review_data.transaction_id).first()
-    if not transaction:
-        raise HTTPException(404, "Transaction not found")
+    transaction = get_or_404(TransactionDB, review_data.transaction_id, db, "Transaction not found")
     
     if transaction.status != "completed":
         raise HTTPException(status_code=400, detail="Can only review completed transactions")
@@ -2122,9 +2159,7 @@ def get_reviews(
 @app.get("/api/reviews/{review_id}", response_model=ReviewResponse)
 def get_review(review_id: str, db: Session = Depends(get_db)):
     """Get a specific review by ID."""
-    review = db.query(ReviewDB).filter(ReviewDB.id == review_id).first()
-    if not review:
-        raise HTTPException(404, "Review not found")
+    review = get_or_404(ReviewDB, review_id, db, "Review not found")
     return review_to_response(review)
 
 
@@ -2132,18 +2167,11 @@ def get_review(review_id: str, db: Session = Depends(get_db)):
 def add_review_response(
     review_id: str,
     response_data: ReviewUpdate,
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Add a response to a review. Only the reviewee can add a response."""
-    firebase_uid = token_data["uid"]
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not user:
-        raise HTTPException(404, "User not found")
-    
-    review = db.query(ReviewDB).filter(ReviewDB.id == review_id).first()
-    if not review:
-        raise HTTPException(404, "Review not found")
+    review = get_or_404(ReviewDB, review_id, db, "Review not found")
     
     # Only the reviewee can add a response
     if review.reviewee_id != user.id:
@@ -2166,18 +2194,11 @@ def add_review_response(
 @app.delete("/api/reviews/{review_id}")
 def delete_review(
     review_id: str,
-    token_data: dict = Depends(verify_token),
+    user: UserDB = Depends(get_current_user),  # Use dependency injection
     db: Session = Depends(get_db),
 ):
     """Delete a review. Only the reviewer can delete their own review."""
-    firebase_uid = token_data["uid"]
-    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
-    if not user:
-        raise HTTPException(404, "User not found")
-    
-    review = db.query(ReviewDB).filter(ReviewDB.id == review_id).first()
-    if not review:
-        raise HTTPException(404, "Review not found")
+    review = get_or_404(ReviewDB, review_id, db, "Review not found")
     
     # Only the reviewer can delete their review
     if review.reviewer_id != user.id:
