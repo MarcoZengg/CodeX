@@ -767,7 +767,6 @@ export default function Messages() {
       <div
         style={{
           paddingLeft: 8,
-          display: "flex",
           flexDirection: "column",
           height: isMobile ? "auto" : "100%",
           boxSizing: "border-box",
