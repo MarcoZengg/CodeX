@@ -16,8 +16,8 @@ import { useEffect } from "react";
 
 export function meta() {
   return [
-    { title: "Complete Profile - BUTrift" },
-    { name: "description", content: "Complete your BUTrift profile" },
+    { title: "Complete Profile - BUThrift" },
+    { name: "description", content: "Complete your BUThrift profile" },
   ];
 }
 
@@ -296,7 +296,7 @@ export default function CompleteProfile() {
                   <Input
                     id="display_name"
                     type="text"
-                    placeholder="Your name as it appears on BUTrift"
+                    placeholder="Your name as it appears on BUThrift"
                     value={formData.display_name}
                     onChange={(e) => handleChange("display_name", e.target.value)}
                     className="pl-10 h-12"

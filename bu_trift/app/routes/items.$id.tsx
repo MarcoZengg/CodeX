@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Star, MapPin, MessageCircle, ShieldCheck, ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import { Star, MapPin, MessageCircle, ShieldCheck, ArrowLeft, ChevronLeft, ChevronRight, Edit3 } from "lucide-react";
 import { motion } from "framer-motion";
 
 const conditionColors: Record<string, string> = {
@@ -24,7 +24,7 @@ const conditionColors: Record<string, string> = {
 
 export function meta({ params }: Route.MetaArgs) {
   return [
-    { title: `Item Details - BUTrift` },
+    { title: `Item Details - BUThrift` },
     { name: "description", content: "View item details" },
   ];
 }
@@ -269,6 +269,8 @@ export default function ItemDetail({ params }: Route.ComponentProps) {
     );
   }
 
+  const isOwner = currentUser && currentUser.id === item.seller_id;
+
   const nextImage = () => setCurrentImageIndex((prev) => (prev + 1) % (item.images?.length || 1));
   const prevImage = () => setCurrentImageIndex((prev) => (prev - 1 + (item.images?.length || 1)) % (item.images?.length || 1));
 
@@ -309,7 +311,9 @@ export default function ItemDetail({ params }: Route.ComponentProps) {
                 {item.condition.replace('_', ' ')}
               </Badge>
               <h1 className="text-4xl font-bold text-neutral-900">{item.title}</h1>
-              <p className="text-4xl font-bold text-red-600 mt-2">${item.price.toFixed(2)}</p>
+              <div className="flex items-center gap-4 flex-wrap">
+                <p className="text-4xl font-bold text-red-600 mt-2">${item.price.toFixed(2)}</p>
+              </div>
             </motion.div>
 
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5, delay: 0.1 }}>
@@ -337,8 +341,16 @@ export default function ItemDetail({ params }: Route.ComponentProps) {
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600 font-bold text-xl">
-                        {seller.display_name[0]}
+                      <div className="w-12 h-12 rounded-full overflow-hidden bg-red-100 flex items-center justify-center text-red-600 font-bold text-xl border-2 border-red-200/60">
+                        {seller.profile_image_url ? (
+                          <img
+                            src={seller.profile_image_url}
+                            alt={seller.display_name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span>{seller.display_name[0]}</span>
+                        )}
                       </div>
                       <div>
                         <div className="font-semibold text-lg">{seller.display_name}</div>
@@ -398,6 +410,22 @@ export default function ItemDetail({ params }: Route.ComponentProps) {
                           This is your item
                         </Button>
                       )}
+                      {item.status !== "available" && buyRequestStatus === "none" && !activeTransactionId && currentUser && currentUser.id !== seller.id && (
+                        <Button disabled className="w-full" variant="outline">
+                          Item is {item.status}
+                        </Button>
+                      )}
+                      {/* Jerry's Edit button - for seller only */}
+                      {isOwner && (
+                        <Button
+                          variant="outline"
+                          className="w-full border-red-200 text-red-700 hover:bg-red-50"
+                          onClick={() => navigate(`/items/${item.id}/edit`)}
+                        >
+                          <Edit3 className="w-4 h-4 mr-2" />
+                          Edit listing
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -409,4 +437,3 @@ export default function ItemDetail({ params }: Route.ComponentProps) {
     </div>
   );
 }
-

@@ -10,8 +10,10 @@ import { createPageUrl } from "@/utils";
 import { API_URL } from "@/config";
 import { Trash2, Loader2, AlertTriangle } from "lucide-react";
 
+const MAX_BIO_LENGTH = 250;
+
 export function meta() {
-  return [{ title: "Edit Profile - BUTrift" }];
+  return [{ title: "Edit Profile - BUThrift" }];
 }
 
 export default function EditProfile() {
@@ -198,7 +200,16 @@ export default function EditProfile() {
 
             <div>
               <label className="text-sm font-medium mb-1 block">Bio</label>
-              <Textarea value={bio} onChange={(e) => setBio(e.target.value)} />
+              <Textarea
+                value={bio}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setBio(value.length > MAX_BIO_LENGTH ? value.slice(0, MAX_BIO_LENGTH) : value);
+                }}
+              />
+              <p className="text-xs text-neutral-500 mt-1">
+                Character limit: {bio.length} / {MAX_BIO_LENGTH}
+              </p>
             </div>
 
             <div>

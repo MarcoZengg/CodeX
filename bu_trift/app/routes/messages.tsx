@@ -14,7 +14,7 @@ import { createPageUrl } from "@/utils";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Messages - BUTrift" },
+    { title: "Messages - BUThrift" },
     { name: "description", content: "View your conversations" },
   ];
 }

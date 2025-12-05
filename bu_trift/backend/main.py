@@ -96,6 +96,18 @@ class ItemStatusUpdate(BaseModel):
     status: str
 
 
+class ItemUpdate(BaseModel):
+    """Partial update payload for item listings."""
+    title: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[float] = None
+    category: Optional[str] = None
+    condition: Optional[str] = None
+    location: Optional[str] = None
+    is_negotiable: Optional[bool] = None
+    images: Optional[List[str]] = None
+
+
 class UserRegister(BaseModel):
     email: str
     display_name: str
@@ -429,7 +441,7 @@ async def upload_image(
 
 @app.get("/")
 def root():
-    return {"message": "BUTrift API is running!"}
+    return {"message": "BUThrift API is running!"}
 
 
 @app.get("/api/items", response_model=List[ItemResponse])
@@ -502,6 +514,57 @@ def create_item(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create item: {str(e)}")
+
+
+@app.put("/api/items/{item_id}", response_model=ItemResponse)
+def update_item(
+    item_id: str,
+    updates: ItemUpdate,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """
+    Update an existing item listing. Only the seller can update their own listing.
+    """
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    item = db.query(ItemDB).filter(ItemDB.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    if item.seller_id != user.id:
+        raise HTTPException(status_code=403, detail="You can only edit your own listings")
+
+    if updates.price is not None and updates.price <= 0:
+        raise HTTPException(status_code=400, detail="Price must be greater than 0")
+
+    try:
+        if updates.title is not None:
+            item.title = updates.title
+        if updates.description is not None:
+            item.description = updates.description
+        if updates.price is not None:
+            item.price = updates.price
+        if updates.category is not None:
+            item.category = updates.category
+        if updates.condition is not None:
+            item.condition = updates.condition
+        if updates.location is not None:
+            item.location = updates.location
+        if updates.is_negotiable is not None:
+            item.is_negotiable = updates.is_negotiable
+        if updates.images is not None:
+            item.images = updates.images
+
+        db.commit()
+        db.refresh(item)
+        return item_to_response(item)
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update item: {str(e)}")
 
 
 @app.put("/api/items/{item_id}/status", response_model=ItemResponse)

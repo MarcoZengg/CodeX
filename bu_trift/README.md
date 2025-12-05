@@ -1,8 +1,8 @@
-# BUTrift - Campus Marketplace
+# BUThrift - Campus Marketplace
 
 > Boston University's trusted marketplace for sustainable student living
 
-BUTrift is a campus marketplace platform that enables BU students to buy and sell secondhand items, promoting sustainability and affordability within the verified campus community.
+BUThrift is a campus marketplace platform that enables BU students to buy and sell secondhand items, promoting sustainability and affordability within the verified campus community.
 
 ## 📋 Project Overview
 

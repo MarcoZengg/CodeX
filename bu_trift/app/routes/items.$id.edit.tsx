@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import type { Route } from "./+types/sell";
+import type { Route } from "./+types/items.$id.edit";
 import { useNavigate } from "react-router";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,10 +10,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Upload, X, Camera, Plus, DollarSign } from "lucide-react";
+import { Upload, X, Camera, Pencil, DollarSign, ArrowLeft } from "lucide-react";
 import { motion } from "framer-motion";
-import type { ItemCategory, ItemCondition, Item as ItemType } from "@/entities/Item";
-import { ItemEntity } from "@/entities/Item";
+import { Item } from "@/entities";
+import type { Item as ItemType, ItemCategory, ItemCondition } from "@/entities/Item";
 import { API_URL } from "../config";
 import { getFirebaseToken } from "../utils/auth";
 
@@ -51,31 +51,21 @@ interface FormData {
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Sell Item - BUThrift" },
-    { name: "description", content: "List a new item for sale on BUThrift" },
+    { title: "Edit Listing - BUThrift" },
+    { name: "description", content: "Update your item listing" },
   ];
 }
 
-export default function Sell() {
+export default function EditItem({ params }: Route.ComponentProps) {
   const navigate = useNavigate();
+  const { id: itemId } = params;
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [firebaseToken, setFirebaseToken] = useState<string | null>(null);
+
+  const [isLoadingItem, setIsLoadingItem] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
-
-  // Load Firebase token & redirect if missing
-  useEffect(() => {
-    const checkAuth = async () => {
-      const token = await getFirebaseToken(false);
-      if (!token) {
-        navigate(createPageUrl("Login"));
-        return;
-      }
-      setFirebaseToken(token);
-    };
-    checkAuth();
-  }, [navigate]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<FormData>({
     title: "",
@@ -85,17 +75,70 @@ export default function Sell() {
     condition: "",
     location: "",
     is_negotiable: false,
-    images: []
+    images: [],
   });
 
+  useEffect(() => {
+    const loadItem = async () => {
+      setLoadError(null);
+      try {
+        const token = await getFirebaseToken(false);
+        if (!token) {
+          navigate(createPageUrl("Login"));
+          return;
+        }
+
+        const existingItem = await Item.get(itemId);
+        const storedUser = localStorage.getItem("currentUser");
+        const parsedUser = storedUser ? JSON.parse(storedUser) : null;
+
+        if (!existingItem || !existingItem.id) {
+          setLoadError("Item not found.");
+          return;
+        }
+
+        if (!parsedUser?.id) {
+          navigate(createPageUrl("Login"));
+          return;
+        }
+
+        if (existingItem.seller_id !== parsedUser.id) {
+          setLoadError("You can only edit your own listings.");
+          return;
+        }
+
+        setFormData({
+          title: existingItem.title || "",
+          description: existingItem.description || "",
+          price: existingItem.price?.toString() || "",
+          category: (existingItem.category as ItemCategory) || "",
+          condition: (existingItem.condition as ItemCondition) || "",
+          location: existingItem.location || "",
+          is_negotiable: existingItem.is_negotiable ?? false,
+          images: existingItem.images || [],
+        });
+
+        if ((existingItem.images || []).length > 0) {
+          setImageError(null);
+        }
+      } catch (error) {
+        console.error("Error loading item:", error);
+        setLoadError(error instanceof Error ? error.message : "Failed to load item.");
+      } finally {
+        setIsLoadingItem(false);
+      }
+    };
+
+    loadItem();
+  }, [itemId, navigate]);
+
   const handleInputChange = (field: keyof FormData, value: any) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
   };
 
-  // Image upload with Firebase token authentication
   const handleFileUpload = async (files: FileList | null) => {
     if (!files) return;
 
@@ -103,7 +146,6 @@ export default function Sell() {
     const uploadedURLs: string[] = [];
 
     try {
-      // Get fresh token for each upload
       let token = await getFirebaseToken(false);
       if (!token) {
         navigate(createPageUrl("Login"));
@@ -114,16 +156,14 @@ export default function Sell() {
         const data = new FormData();
         data.append("file", file);
 
-        // Try upload with current token
         let res = await fetch(`${API_URL}/api/upload-image`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
           body: data,
         });
 
-        // If 401, refresh token and retry
         if (res.status === 401) {
-          token = await getFirebaseToken(true); // Force refresh
+          token = await getFirebaseToken(true);
           if (!token) {
             throw new Error("Authentication failed. Please login again.");
           }
@@ -140,12 +180,10 @@ export default function Sell() {
         uploadedURLs.push(json.url);
       }
 
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         images: [...prev.images, ...uploadedURLs],
       }));
-      
-      // Clear image error when images are successfully uploaded
       setImageError(null);
     } catch (error) {
       console.error("Error uploading images:", error);
@@ -156,35 +194,31 @@ export default function Sell() {
   };
 
   const removeImage = (indexToRemove: number) => {
-    setFormData(prev => {
+    setFormData((prev) => {
       const newImages = prev.images.filter((_, index) => index !== indexToRemove);
-      // If removing the last image, show error
       if (newImages.length === 0) {
         setImageError("Please upload at least one photo for your listing.");
       } else {
-        // Clear error if images remain
         setImageError(null);
       }
       return {
         ...prev,
-        images: newImages
+        images: newImages,
       };
     });
   };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-
-    // Get fresh token
-    const token = await getFirebaseToken(false);
-    if (!token) {
-      navigate(createPageUrl("Login"));
-      return;
-    }
     setIsSubmitting(true);
 
     try {
-      // Validate required fields
+      const token = await getFirebaseToken(false);
+      if (!token) {
+        navigate(createPageUrl("Login"));
+        return;
+      }
+
       if (!formData.category || !formData.condition) {
         alert("Please select both category and condition");
         setIsSubmitting(false);
@@ -197,11 +231,9 @@ export default function Sell() {
         return;
       }
 
-      // Validate that at least one image is uploaded
       if (!formData.images || formData.images.length === 0) {
         setImageError("Please upload at least one photo for your listing.");
         setIsSubmitting(false);
-        // Scroll to image upload section
         const imageSection = document.getElementById("image-upload-section");
         if (imageSection) {
           imageSection.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -209,10 +241,8 @@ export default function Sell() {
         return;
       }
 
-      // Clear image error if images are present
       setImageError(null);
 
-      // MUST NOT send seller_id — backend derives from Firebase token
       const payload: Partial<ItemType> = {
         title: formData.title,
         description: formData.description,
@@ -224,24 +254,41 @@ export default function Sell() {
         images: formData.images || [],
       };
 
-      console.log("Creating item with images:", payload.images);
-      await ItemEntity.create(payload);
-
-      navigate(createPageUrl("Home"));
+      await Item.update(itemId, payload);
+      navigate(`/items/${itemId}`);
     } catch (error) {
-      console.error("Error creating item:", error);
-      alert(error instanceof Error ? error.message : "Failed to create listing. Please try again.");
+      console.error("Error updating item:", error);
+      alert(error instanceof Error ? error.message : "Failed to update listing. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Show loading state while checking token
-  if (!firebaseToken) {
+  if (isLoadingItem) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-white to-neutral-50 p-6 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-neutral-600">Loading...</p>
+          <p className="text-neutral-600">Loading your listing...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-white to-neutral-50 p-6 flex items-center justify-center">
+        <div className="max-w-lg text-center space-y-4">
+          <h2 className="text-2xl font-bold text-neutral-900">Unable to edit listing</h2>
+          <p className="text-neutral-600">{loadError}</p>
+          <div className="flex gap-3 justify-center">
+            <Button variant="outline" onClick={() => navigate(-1)}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Go Back
+            </Button>
+            <Button onClick={() => navigate(createPageUrl("Profile"))} className="bg-red-600 hover:bg-red-700">
+              View Profile
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -254,14 +301,19 @@ export default function Sell() {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="mb-8"
+          className="mb-8 flex items-center justify-between gap-4 flex-wrap"
         >
-          <h1 className="text-3xl font-bold text-neutral-900 mb-2">Sell Your Item</h1>
-          <p className="text-neutral-600">List your item for fellow BU students to discover</p>
+          <div>
+            <h1 className="text-3xl font-bold text-neutral-900 mb-2">Edit Listing</h1>
+            <p className="text-neutral-600">Keep your listing up to date for buyers.</p>
+          </div>
+          <Button variant="outline" onClick={() => navigate(-1)}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back
+          </Button>
         </motion.div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Basic Information */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -270,8 +322,8 @@ export default function Sell() {
             <Card className="border-neutral-200/60">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Plus className="w-5 h-5 text-red-600" />
-                  Item Details
+                  <Pencil className="w-5 h-5 text-red-600" />
+                  Listing Details
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -281,7 +333,7 @@ export default function Sell() {
                     id="title"
                     placeholder="e.g., Calculus Textbook, iPhone 12, Study Desk..."
                     value={formData.title}
-                    onChange={(e) => handleInputChange('title', e.target.value)}
+                    onChange={(e) => handleInputChange("title", e.target.value)}
                     required
                     className="mt-2"
                   />
@@ -293,7 +345,7 @@ export default function Sell() {
                     id="description"
                     placeholder="Describe your item's condition, any flaws, why you're selling it..."
                     value={formData.description}
-                    onChange={(e) => handleInputChange('description', e.target.value)}
+                    onChange={(e) => handleInputChange("description", e.target.value)}
                     required
                     className="mt-2 h-32"
                   />
@@ -304,7 +356,7 @@ export default function Sell() {
                     <Label htmlFor="category">Category</Label>
                     <Select
                       value={formData.category}
-                      onValueChange={(value) => handleInputChange('category', value as ItemCategory)}
+                      onValueChange={(value) => handleInputChange("category", value as ItemCategory)}
                     >
                       <SelectTrigger className="mt-2">
                         <SelectValue placeholder="Select category" />
@@ -323,7 +375,7 @@ export default function Sell() {
                     <Label htmlFor="condition">Condition</Label>
                     <Select
                       value={formData.condition}
-                      onValueChange={(value) => handleInputChange('condition', value as ItemCondition)}
+                      onValueChange={(value) => handleInputChange("condition", value as ItemCondition)}
                     >
                       <SelectTrigger className="mt-2">
                         <SelectValue placeholder="Select condition" />
@@ -342,7 +394,6 @@ export default function Sell() {
             </Card>
           </motion.div>
 
-          {/* Pricing & Location */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -366,7 +417,7 @@ export default function Sell() {
                       step="0.01"
                       placeholder="0.00"
                       value={formData.price}
-                      onChange={(e) => handleInputChange('price', e.target.value)}
+                      onChange={(e) => handleInputChange("price", e.target.value)}
                       required
                       className="mt-2"
                     />
@@ -378,7 +429,7 @@ export default function Sell() {
                       id="location"
                       placeholder="e.g., Warren Towers Lobby, GSU..."
                       value={formData.location}
-                      onChange={(e) => handleInputChange('location', e.target.value)}
+                      onChange={(e) => handleInputChange("location", e.target.value)}
                       className="mt-2"
                     />
                   </div>
@@ -387,7 +438,7 @@ export default function Sell() {
                 <div className="flex items-center space-x-3">
                   <Switch
                     checked={formData.is_negotiable}
-                    onCheckedChange={(checked) => handleInputChange('is_negotiable', checked)}
+                    onCheckedChange={(checked) => handleInputChange("is_negotiable", checked)}
                   />
                   <Label>Price is negotiable</Label>
                 </div>
@@ -395,7 +446,6 @@ export default function Sell() {
             </Card>
           </motion.div>
 
-          {/* Image Upload */}
           <motion.div
             id="image-upload-section"
             initial={{ opacity: 0, y: 30 }}
@@ -463,7 +513,6 @@ export default function Sell() {
             </Card>
           </motion.div>
 
-          {/* Submit Button */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -473,7 +522,7 @@ export default function Sell() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => navigate(createPageUrl("Home"))}
+              onClick={() => navigate(-1)}
               className="flex-1"
             >
               Cancel
@@ -483,7 +532,7 @@ export default function Sell() {
               disabled={isSubmitting || uploadingImages}
               className="flex-1 bg-red-600 hover:bg-red-700"
             >
-              {isSubmitting ? "Publishing..." : "Publish Listing"}
+              {isSubmitting ? "Saving..." : "Save Changes"}
             </Button>
           </motion.div>
         </form>

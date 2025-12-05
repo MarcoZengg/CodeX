@@ -16,7 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export function meta() {
   return [
-    { title: "Student Profile - BUTrift" },
+    { title: "Student Profile - BUThrift" },
     {
       name: "description",
       content: "View another student's profile and reviews",
@@ -109,7 +109,7 @@ export default function UserProfile() {
                         {displayName}
                       </h1>
                       <p className="text-sm text-neutral-600">
-                        BU student on BUTrift
+                        BU student on BUThrift
                       </p>
                     </div>
                     <div className="flex items-center gap-3">

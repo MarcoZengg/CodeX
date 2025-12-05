@@ -17,11 +17,12 @@ interface ItemGridProps {
   items: ItemType[];
   onDelete?: (id: string) => void;
   onMarkSold?: (id: string) => void;
+  onEdit?: (id: string) => void;
   deletingId?: string | null;
   updatingId?: string | null;
 }
 
-function ItemGrid({ items, onDelete, onMarkSold, deletingId, updatingId }: ItemGridProps) {
+function ItemGrid({ items, onDelete, onMarkSold, onEdit, deletingId, updatingId }: ItemGridProps) {
   if (items.length === 0) {
     return (
       <div className="text-center py-12">
@@ -38,7 +39,7 @@ function ItemGrid({ items, onDelete, onMarkSold, deletingId, updatingId }: ItemG
   }
 
   return (
-    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 md:grid-cols-3">
       {items.map((item) => {
         if (!item.id) return null; // Guard against undefined ids
         return (
@@ -71,8 +72,20 @@ function ItemGrid({ items, onDelete, onMarkSold, deletingId, updatingId }: ItemG
                 </p>
               </CardContent>
             </Link>
-            {onDelete && (
+            {(onDelete || onMarkSold || onEdit) && (
               <div className="px-4 pb-4 space-y-2">
+                {onEdit && (
+                  <Button
+                    className="w-full bg-red-600 hover:bg-red-700"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onEdit(item.id);
+                    }}
+                  >
+                    Edit listing
+                  </Button>
+                )}
                 {onMarkSold && item.status === "available" && (
                   <Button
                     variant="secondary"
@@ -87,18 +100,20 @@ function ItemGrid({ items, onDelete, onMarkSold, deletingId, updatingId }: ItemG
                     {updatingId === item.id ? "Marking..." : "Mark as sold"}
                   </Button>
                 )}
-                <Button
-                  variant="outline"
-                  className="w-full border-red-200 text-red-700 hover:bg-red-50"
-                  disabled={deletingId === item.id}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onDelete(item.id);
-                  }}
-                >
-                  {deletingId === item.id ? "Removing..." : "Remove listing"}
-                </Button>
+                {onDelete && (
+                  <Button
+                    variant="outline"
+                    className="w-full border-red-200 text-red-700 hover:bg-red-50"
+                    disabled={deletingId === item.id}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onDelete(item.id);
+                    }}
+                  >
+                    {deletingId === item.id ? "Removing..." : "Remove listing"}
+                  </Button>
+                )}
               </div>
             )}
           </Card>
@@ -110,7 +125,7 @@ function ItemGrid({ items, onDelete, onMarkSold, deletingId, updatingId }: ItemG
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Profile - BUTrift" },
+    { title: "Profile - BUThrift" },
     { name: "description", content: "View your profile and listings" },
   ];
 }
@@ -179,6 +194,10 @@ export default function Profile() {
     }
   };
 
+  const handleEditItem = (itemId: string) => {
+    navigate(`/items/${itemId}/edit`);
+  };
+
   const handleMarkSold = async (itemId: string) => {
     const confirmed = window.confirm("Mark this listing as sold?");
     if (!confirmed) return;
@@ -226,7 +245,7 @@ export default function Profile() {
                 </div>
                 
                 <h1 className="text-3xl font-bold text-neutral-900 mb-4">
-                  Welcome to BUTrift
+                  Welcome to BUThrift
                 </h1>
                 
                 <p className="text-lg text-neutral-600 mb-8 max-w-md mx-auto">
@@ -258,7 +277,7 @@ export default function Profile() {
                   </p>
                   <Link to={createPageUrl("Register")}>
                     <Button variant="ghost" className="text-red-600 hover:text-red-700 hover:bg-red-50">
-                      Join BUTrift for free
+                      Join BUThrift for free
                     </Button>
                   </Link>
                 </div>
@@ -382,6 +401,7 @@ export default function Profile() {
               <ItemGrid
                 items={userItems.filter(item => item.status === "available")}
                 onDelete={handleDeleteItem}
+                onEdit={handleEditItem}
                 onMarkSold={handleMarkSold}
                 deletingId={deletingId}
                 updatingId={updatingId}
@@ -389,13 +409,17 @@ export default function Profile() {
             </TabsContent>
             
             <TabsContent value="sold" className="mt-6">
-              <ItemGrid items={userItems.filter(item => item.status === "sold")} />
+              <ItemGrid
+                items={userItems.filter(item => item.status === "sold")}
+                onEdit={handleEditItem}
+              />
             </TabsContent>
             
             <TabsContent value="all" className="mt-6">
               <ItemGrid
                 items={userItems}
                 onDelete={handleDeleteItem}
+                onEdit={handleEditItem}
                 onMarkSold={handleMarkSold}
                 deletingId={deletingId}
                 updatingId={updatingId}

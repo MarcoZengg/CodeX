@@ -7,8 +7,8 @@ import { createPageUrl } from "@/utils";
 
 export function meta() {
   return [
-    { title: "About Us - BUTrift" },
-    { name: "description", content: "Learn about BUTrift's mission to promote sustainable student living at Boston University" },
+    { title: "About Us - BUThrift" },
+    { name: "description", content: "Learn about BUThrift's mission to promote sustainable student living at Boston University" },
   ];
 }
 
@@ -82,7 +82,7 @@ export default function About() {
           transition={{ duration: 0.8 }}
           className="relative max-w-7xl mx-auto px-6 text-center"
         >
-          <h1 className="text-5xl md:text-6xl font-bold mb-6">About BUTrift</h1>
+          <h1 className="text-5xl md:text-6xl font-bold mb-6">About BUThrift</h1>
           <p className="text-xl text-red-100 max-w-2xl mx-auto">
             Building a more sustainable and connected Boston University community, one transaction at a time.
           </p>

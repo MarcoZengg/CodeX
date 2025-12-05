@@ -35,6 +35,8 @@ const ItemService = {
   ): Promise<ItemType[]> => ItemEntity.filter(filters, sortBy, limit),
   get: async (id: string): Promise<ItemType> => ItemEntity.get(id),
   create: async (data: Partial<ItemType>): Promise<ItemType> => ItemEntity.create(data),
+  update: async (id: string, data: Partial<ItemType>): Promise<ItemType> =>
+    ItemEntity.update(id, data),
   delete: async (id: string): Promise<void> => ItemEntity.delete(id),
   updateStatus: async (id: string, status: ItemStatus): Promise<ItemType> =>
     ItemEntity.updateStatus(id, status),
