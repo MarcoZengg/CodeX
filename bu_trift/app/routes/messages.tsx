@@ -294,6 +294,8 @@ export default function Messages() {
   const [conversations, setConversations] = useState<ConversationType[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+  const [showingConversationPane, setShowingConversationPane] = useState(false);
   const [participantUsers, setParticipantUsers] = useState<Record<string, UserType>>({});
   const [unreadTotal, setUnreadTotal] = useState<number>(0);
 
@@ -309,6 +311,11 @@ export default function Messages() {
   const [showTransactionList, setShowTransactionList] = useState(false);
 
   useEffect(() => {
+    const mq = window.matchMedia("(max-width: 768px)");
+    const handleResize = () => setIsMobile(mq.matches);
+    setIsMobile(mq.matches);
+    mq.addEventListener("change", handleResize);
+
     async function load() {
       try {
         setIsLoading(true);
@@ -483,6 +490,7 @@ export default function Messages() {
 
     // Cleanup: disconnect WebSocket on unmount
     return () => {
+      mq.removeEventListener("change", handleResize);
       if (wsClientRef.current) {
         wsClientRef.current.disconnect();
       }
@@ -608,9 +616,9 @@ export default function Messages() {
     <div
       style={{
         padding: 24,
-        display: "grid",
-        gridTemplateColumns: "280px 1fr",
-        gap: 16,
+        display: isMobile ? "block" : "grid",
+        gridTemplateColumns: isMobile ? "1fr" : "280px 1fr",
+        gap: isMobile ? 0 : 16,
         height: "100%",
         boxSizing: "border-box",
       }}
@@ -618,8 +626,10 @@ export default function Messages() {
       {/* Left: conversation list */}
       <div
       style={{
+        display: isMobile && showingConversationPane ? "none" : "block",
         borderRight: "1px solid #e5e5e5",
-        paddingRight: 16,
+        paddingRight: isMobile ? 0 : 16,
+        marginBottom: isMobile ? 16 : 0,
         overflowY: "auto",
       }}
     >
@@ -659,7 +669,12 @@ export default function Messages() {
             return (
               <button
                 key={c.id}
-                onClick={() => setSelectedId(c.id!)}
+                onClick={() => {
+                  setSelectedId(c.id!);
+                  if (isMobile) {
+                    setShowingConversationPane(true);
+                  }
+                }}
                 style={{
                   textAlign: "left",
                   padding: "8px 10px",
@@ -754,26 +769,44 @@ export default function Messages() {
           paddingLeft: 8,
           display: "flex",
           flexDirection: "column",
-          height: "100%",
+          height: isMobile ? "auto" : "100%",
           boxSizing: "border-box",
+          display: isMobile && !showingConversationPane ? "none" : "flex",
         }}
       >
         {selectedConversation ? (
           <>
-            <div style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <h3
-                  style={{
-                    fontSize: 20,
-                    fontWeight: 700,
-                    marginBottom: 4,
-                  }}
-                >
-                  {selectedConversation.item_title ?? "Conversation"}
-                </h3>
-                <p style={{ color: "#666", fontSize: 14 }}>
-                  Conversation ID: {selectedConversation.id}
-                </p>
+            <div style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {isMobile && (
+                  <button
+                    onClick={() => setShowingConversationPane(false)}
+                    style={{
+                      padding: "6px 10px",
+                      borderRadius: 8,
+                      border: "1px solid #e5e5e5",
+                      backgroundColor: "#fff",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    ← Back
+                  </button>
+                )}
+                <div>
+                  <h3
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 700,
+                      marginBottom: 4,
+                    }}
+                  >
+                    {selectedConversation.item_title ?? "Conversation"}
+                  </h3>
+                  <p style={{ color: "#666", fontSize: 14, margin: 0 }}>
+                    Conversation ID: {selectedConversation.id}
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setShowTransactionList(true)}
@@ -786,6 +819,7 @@ export default function Messages() {
                   fontSize: 13,
                   fontWeight: 600,
                   cursor: "pointer",
+                  whiteSpace: "nowrap",
                 }}
               >
                 Transactions {transactions.length > 0 ? `(${transactions.length})` : ""}
@@ -800,6 +834,7 @@ export default function Messages() {
                 borderRadius: 12,
                 padding: 12,
                 overflowY: "auto",
+                maxHeight: isMobile ? "60vh" : "calc(100vh - 260px)",
                 marginBottom: 12,
                 display: "flex",
                 flexDirection: "column",
