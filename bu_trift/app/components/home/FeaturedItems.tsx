@@ -76,7 +76,12 @@ export default function FeaturedItems({ items, isLoading }: FeaturedItemsProps) 
                         <span className="text-neutral-400 text-sm">No Image</span>
                       </div>
                     )}
-                    <div className="absolute top-3 right-3">
+                    <div className="absolute top-3 right-3 flex flex-col gap-2">
+                      {item.status === "reserved" && (
+                        <Badge className="bg-yellow-100 text-yellow-800 font-medium">
+                          Reserved
+                        </Badge>
+                      )}
                       <Badge className={`${conditionColors[item.condition] || ''} font-medium`}>
                         {item.condition.replace('_', ' ')}
                       </Badge>

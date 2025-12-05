@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { CheckCircle2, XCircle, Calendar, MapPin, ArrowLeft, Star } from "lucide-react";
+import { CheckCircle2, XCircle, Calendar, MapPin, ArrowLeft, Star, Clock, AlertCircle } from "lucide-react";
 import { WebSocketClient } from "@/utils/websocket";
 import { API_URL } from "@/config";
 
@@ -28,6 +28,7 @@ export default function TransactionDetail({ params }: Route.ComponentProps) {
   const [reviewRating, setReviewRating] = useState<number>(5);
   const [reviewComment, setReviewComment] = useState<string>("");
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [justConfirmed, setJustConfirmed] = useState<"buyer" | "seller" | "buyer_cancel" | "seller_cancel" | null>(null);
   const wsClientRef = useRef<WebSocketClient | null>(null);
   const transactionId = params.id;
   
@@ -202,6 +203,7 @@ export default function TransactionDetail({ params }: Route.ComponentProps) {
   const handleConfirm = async (type: "buyer" | "seller") => {
     if (!transaction) return;
     setIsUpdating(true);
+    setJustConfirmed(type === "buyer" ? "buyer" : "seller");
     
     try {
       const update: Partial<TransactionType> = {};
@@ -223,14 +225,18 @@ export default function TransactionDetail({ params }: Route.ComponentProps) {
       }
     } catch (error: any) {
       alert(error.message || "Failed to confirm transaction");
+      setJustConfirmed(null);
     } finally {
       setIsUpdating(false);
+      // Clear confirmation feedback after 3 seconds
+      setTimeout(() => setJustConfirmed(null), 3000);
     }
   };
   
   const handleCancelConfirm = async (type: "buyer" | "seller") => {
     if (!transaction) return;
     setIsUpdating(true);
+    setJustConfirmed(type === "buyer" ? "buyer_cancel" : "seller_cancel");
     
     try {
       const update: Partial<TransactionType> = {};
@@ -248,8 +254,11 @@ export default function TransactionDetail({ params }: Route.ComponentProps) {
       }
     } catch (error: any) {
       alert(error.message || "Failed to confirm cancellation");
+      setJustConfirmed(null);
     } finally {
       setIsUpdating(false);
+      // Clear confirmation feedback after 3 seconds
+      setTimeout(() => setJustConfirmed(null), 3000);
     }
   };
 
@@ -426,19 +435,81 @@ export default function TransactionDetail({ params }: Route.ComponentProps) {
                     <XCircle className="w-5 h-5 text-gray-400" />
                   )}
                 </div>
-                {isSeller && !transaction.seller_confirmed && (
-                  <Button
-                    onClick={() => handleConfirm("seller")}
-                    disabled={isUpdating}
-                    className="w-full mt-2"
-                  >
-                    I Confirm
-                  </Button>
-                )}
-                {!isSeller && (
-                  <p className="text-sm text-gray-500">
-                    {transaction.seller_confirmed ? "Seller has confirmed" : "Waiting for seller..."}
-                  </p>
+                {isSeller ? (
+                  transaction.seller_confirmed ? (
+                    <div className="mt-2 p-3 rounded-lg bg-green-50 border border-green-200">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-green-700">
+                            You have confirmed
+                          </p>
+                          <p className="text-xs text-green-600 mt-1">
+                            Waiting for buyer to confirm...
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <Button
+                        onClick={() => handleConfirm("seller")}
+                        disabled={isUpdating}
+                        className={`w-full mt-2 ${justConfirmed === "seller" ? "bg-green-600 hover:bg-green-700" : ""}`}
+                      >
+                        {justConfirmed === "seller" ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                            Confirmed!
+                          </>
+                        ) : isUpdating ? (
+                          "Confirming..."
+                        ) : (
+                          "I Confirm"
+                        )}
+                      </Button>
+                      {justConfirmed === "seller" && (
+                        <div className="mt-2 p-3 rounded-lg bg-green-50 border border-green-200">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+                            <p className="text-sm font-semibold text-green-700">
+                              ✓ You have confirmed the transaction
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )
+                ) : (
+                  <div className={`mt-2 p-3 rounded-lg ${transaction.seller_confirmed ? "bg-green-50 border border-green-200" : "bg-yellow-50 border border-yellow-200"}`}>
+                    <div className="flex items-center gap-2">
+                      {transaction.seller_confirmed ? (
+                        <>
+                          <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-semibold text-green-700">
+                              Seller has confirmed
+                            </p>
+                            <p className="text-xs text-green-600 mt-1">
+                              The seller confirmed the transaction
+                            </p>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="w-5 h-5 text-yellow-600 flex-shrink-0 animate-pulse" />
+                          <div>
+                            <p className="text-sm font-semibold text-yellow-800">
+                              Waiting for seller...
+                            </p>
+                            <p className="text-xs text-yellow-600 mt-1">
+                              The seller needs to confirm to complete the transaction
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
               
@@ -452,19 +523,81 @@ export default function TransactionDetail({ params }: Route.ComponentProps) {
                     <XCircle className="w-5 h-5 text-gray-400" />
                   )}
                 </div>
-                {isBuyer && !transaction.buyer_confirmed && (
-                  <Button
-                    onClick={() => handleConfirm("buyer")}
-                    disabled={isUpdating}
-                    className="w-full mt-2"
-                  >
-                    I Confirm
-                  </Button>
-                )}
-                {!isBuyer && (
-                  <p className="text-sm text-gray-500">
-                    {transaction.buyer_confirmed ? "Buyer has confirmed" : "Waiting for buyer..."}
-                  </p>
+                {isBuyer ? (
+                  transaction.buyer_confirmed ? (
+                    <div className="mt-2 p-3 rounded-lg bg-green-50 border border-green-200">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-green-700">
+                            You have confirmed
+                          </p>
+                          <p className="text-xs text-green-600 mt-1">
+                            Waiting for seller to confirm...
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <Button
+                        onClick={() => handleConfirm("buyer")}
+                        disabled={isUpdating}
+                        className={`w-full mt-2 ${justConfirmed === "buyer" ? "bg-green-600 hover:bg-green-700" : ""}`}
+                      >
+                        {justConfirmed === "buyer" ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                            Confirmed!
+                          </>
+                        ) : isUpdating ? (
+                          "Confirming..."
+                        ) : (
+                          "I Confirm"
+                        )}
+                      </Button>
+                      {justConfirmed === "buyer" && (
+                        <div className="mt-2 p-3 rounded-lg bg-green-50 border border-green-200">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+                            <p className="text-sm font-semibold text-green-700">
+                              ✓ You have confirmed the transaction
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )
+                ) : (
+                  <div className={`mt-2 p-3 rounded-lg ${transaction.buyer_confirmed ? "bg-green-50 border border-green-200" : "bg-yellow-50 border border-yellow-200"}`}>
+                    <div className="flex items-center gap-2">
+                      {transaction.buyer_confirmed ? (
+                        <>
+                          <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-semibold text-green-700">
+                              Buyer has confirmed
+                            </p>
+                            <p className="text-xs text-green-600 mt-1">
+                              The buyer confirmed the transaction
+                            </p>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="w-5 h-5 text-yellow-600 flex-shrink-0 animate-pulse" />
+                          <div>
+                            <p className="text-sm font-semibold text-yellow-800">
+                              Waiting for buyer...
+                            </p>
+                            <p className="text-xs text-yellow-600 mt-1">
+                              The buyer needs to confirm to complete the transaction
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -495,20 +628,82 @@ export default function TransactionDetail({ params }: Route.ComponentProps) {
                     <XCircle className="w-5 h-5 text-gray-400" />
                   )}
                 </div>
-                {isSeller && !transaction.seller_cancel_confirmed && (
-                  <Button
-                    onClick={() => handleCancelConfirm("seller")}
-                    disabled={isUpdating}
-                    variant="destructive"
-                    className="w-full mt-2"
-                  >
-                    I Confirm Cancel
-                  </Button>
-                )}
-                {!isSeller && (
-                  <p className="text-sm text-gray-500">
-                    {transaction.seller_cancel_confirmed ? "Seller confirmed cancellation" : "Waiting for seller..."}
-                  </p>
+                {isSeller ? (
+                  transaction.seller_cancel_confirmed ? (
+                    <div className="mt-2 p-3 rounded-lg bg-orange-50 border border-orange-200">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-5 h-5 text-orange-600 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-orange-700">
+                            You have confirmed cancellation
+                          </p>
+                          <p className="text-xs text-orange-600 mt-1">
+                            Waiting for buyer to confirm cancellation...
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <Button
+                        onClick={() => handleCancelConfirm("seller")}
+                        disabled={isUpdating}
+                        variant="destructive"
+                        className={`w-full mt-2 ${justConfirmed === "seller_cancel" ? "bg-orange-600 hover:bg-orange-700" : ""}`}
+                      >
+                        {justConfirmed === "seller_cancel" ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                            Cancellation Confirmed!
+                          </>
+                        ) : isUpdating ? (
+                          "Confirming..."
+                        ) : (
+                          "I Confirm Cancel"
+                        )}
+                      </Button>
+                      {justConfirmed === "seller_cancel" && (
+                        <div className="mt-2 p-3 rounded-lg bg-orange-50 border border-orange-200">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-5 h-5 text-orange-600 flex-shrink-0" />
+                            <p className="text-sm font-semibold text-orange-700">
+                              ✓ You have confirmed cancellation
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )
+                ) : (
+                  <div className={`mt-2 p-3 rounded-lg ${transaction.seller_cancel_confirmed ? "bg-orange-50 border border-orange-200" : "bg-yellow-50 border border-yellow-200"}`}>
+                    <div className="flex items-center gap-2">
+                      {transaction.seller_cancel_confirmed ? (
+                        <>
+                          <CheckCircle2 className="w-5 h-5 text-orange-600 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-semibold text-orange-700">
+                              Seller confirmed cancellation
+                            </p>
+                            <p className="text-xs text-orange-600 mt-1">
+                              The seller confirmed cancellation of this transaction
+                            </p>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="w-5 h-5 text-yellow-600 flex-shrink-0 animate-pulse" />
+                          <div>
+                            <p className="text-sm font-semibold text-yellow-800">
+                              Waiting for seller...
+                            </p>
+                            <p className="text-xs text-yellow-600 mt-1">
+                              The seller needs to confirm cancellation
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
               
@@ -522,20 +717,82 @@ export default function TransactionDetail({ params }: Route.ComponentProps) {
                     <XCircle className="w-5 h-5 text-gray-400" />
                   )}
                 </div>
-                {isBuyer && !transaction.buyer_cancel_confirmed && (
-                  <Button
-                    onClick={() => handleCancelConfirm("buyer")}
-                    disabled={isUpdating}
-                    variant="destructive"
-                    className="w-full mt-2"
-                  >
-                    I Confirm Cancel
-                  </Button>
-                )}
-                {!isBuyer && (
-                  <p className="text-sm text-gray-500">
-                    {transaction.buyer_cancel_confirmed ? "Buyer confirmed cancellation" : "Waiting for buyer..."}
-                  </p>
+                {isBuyer ? (
+                  transaction.buyer_cancel_confirmed ? (
+                    <div className="mt-2 p-3 rounded-lg bg-orange-50 border border-orange-200">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-5 h-5 text-orange-600 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-orange-700">
+                            You have confirmed cancellation
+                          </p>
+                          <p className="text-xs text-orange-600 mt-1">
+                            Waiting for seller to confirm cancellation...
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <Button
+                        onClick={() => handleCancelConfirm("buyer")}
+                        disabled={isUpdating}
+                        variant="destructive"
+                        className={`w-full mt-2 ${justConfirmed === "buyer_cancel" ? "bg-orange-600 hover:bg-orange-700" : ""}`}
+                      >
+                        {justConfirmed === "buyer_cancel" ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                            Cancellation Confirmed!
+                          </>
+                        ) : isUpdating ? (
+                          "Confirming..."
+                        ) : (
+                          "I Confirm Cancel"
+                        )}
+                      </Button>
+                      {justConfirmed === "buyer_cancel" && (
+                        <div className="mt-2 p-3 rounded-lg bg-orange-50 border border-orange-200">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-5 h-5 text-orange-600 flex-shrink-0" />
+                            <p className="text-sm font-semibold text-orange-700">
+                              ✓ You have confirmed cancellation
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )
+                ) : (
+                  <div className={`mt-2 p-3 rounded-lg ${transaction.buyer_cancel_confirmed ? "bg-orange-50 border border-orange-200" : "bg-yellow-50 border border-yellow-200"}`}>
+                    <div className="flex items-center gap-2">
+                      {transaction.buyer_cancel_confirmed ? (
+                        <>
+                          <CheckCircle2 className="w-5 h-5 text-orange-600 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-semibold text-orange-700">
+                              Buyer confirmed cancellation
+                            </p>
+                            <p className="text-xs text-orange-600 mt-1">
+                              The buyer confirmed cancellation of this transaction
+                            </p>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="w-5 h-5 text-yellow-600 flex-shrink-0 animate-pulse" />
+                          <div>
+                            <p className="text-sm font-semibold text-yellow-800">
+                              Waiting for buyer...
+                            </p>
+                            <p className="text-xs text-yellow-600 mt-1">
+                              The buyer needs to confirm cancellation
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

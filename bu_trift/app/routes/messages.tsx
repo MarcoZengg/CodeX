@@ -28,6 +28,7 @@ function BuyRequestMessageComponent({
   message,
   buyRequest,
   currentUser,
+  transactions,
   onAccept,
   onReject,
   onCancel,
@@ -35,6 +36,7 @@ function BuyRequestMessageComponent({
   message: MessageType;
   buyRequest: BuyRequestType;
   currentUser: UserType | null;
+  transactions: TransactionType[];
   onAccept: () => void;
   onReject: () => void;
   onCancel: () => void;
@@ -274,11 +276,43 @@ function BuyRequestMessageComponent({
         </button>
       )}
       
-      {buyRequest.status === "accepted" && (
-        <p style={{ fontSize: 13, color: "#059669", fontWeight: 600, margin: 0 }}>
-          ✓ Request accepted! Transaction started.
-        </p>
-      )}
+      {buyRequest.status === "accepted" && (() => {
+        // Find the transaction for this buy request
+        const transaction = transactions.find(tx => tx.buy_request_id === buyRequest.id);
+        
+        return (
+          <div style={{ marginTop: 12 }}>
+            <p style={{ fontSize: 13, color: "#059669", fontWeight: 600, margin: "0 0 8px 0" }}>
+              ✓ Request accepted! Transaction started.
+            </p>
+            {transaction && transaction.id && (
+              <button
+                onClick={() => {
+                  window.location.href = `/transactions/${transaction.id}`;
+                }}
+                style={{
+                  width: "100%",
+                  padding: "10px 16px",
+                  borderRadius: 8,
+                  border: "none",
+                  backgroundColor: "#059669",
+                  color: "white",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                }}
+              >
+                <span>→</span>
+                View Transaction
+              </button>
+            )}
+          </div>
+        );
+      })()}
       
       {buyRequest.status === "rejected" && (
         <p style={{ fontSize: 13, color: "#dc2626", margin: 0 }}>
@@ -303,6 +337,8 @@ export default function Messages() {
   const [newMessage, setNewMessage] = useState("");
   const wsClientRef = useRef<WebSocketClient | null>(null);
   const selectedIdRef = useRef<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
   
   // Buy request and transaction state
@@ -535,6 +571,19 @@ export default function Messages() {
 
     loadMessages();
   }, [selectedId, currentUser]);
+
+  // Auto-scroll to bottom when messages change or conversation changes
+  useEffect(() => {
+    const scrollToBottom = () => {
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      }
+    };
+    
+    // Small delay to ensure DOM is updated
+    const timeoutId = setTimeout(scrollToBottom, 100);
+    return () => clearTimeout(timeoutId);
+  }, [messages, selectedId]);
 
   // Load buy requests and transactions when conversation is selected
   useEffect(() => {
@@ -827,6 +876,7 @@ export default function Messages() {
 
             {/* Messages list */}
             <div
+              ref={messagesContainerRef}
               style={{
                 flex: 1,
                 border: "1px solid #e5e5e5",
@@ -860,6 +910,7 @@ export default function Messages() {
                       message={m}
                       buyRequest={buyRequest}
                       currentUser={currentUser}
+                      transactions={transactions}
                       onAccept={async () => {
                         try {
                           const result = await BuyRequest.accept(buyRequest.id!);

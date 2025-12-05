@@ -104,7 +104,18 @@ export default function Items() {
 
   const loadItems = async () => {
     try {
-      const allItems = await Item.filter({ status: "available" }, "-created_date", 100);
+      // Fetch both "available" and "reserved" items
+      const [availableItems, reservedItems] = await Promise.all([
+        Item.filter({ status: "available" }, "-created_date", 100),
+        Item.filter({ status: "reserved" }, "-created_date", 100),
+      ]);
+      
+      // Combine and sort by creation date (newest first)
+      const allItems = [...availableItems, ...reservedItems].sort(
+        (a, b) =>
+          new Date(b.created_date || 0).getTime() - new Date(a.created_date || 0).getTime()
+      );
+      
       setItems(allItems);
     } catch (error) {
       console.error("Error loading items:", error);
@@ -206,7 +217,12 @@ export default function Items() {
                             <span className="text-neutral-400 text-sm">No Image</span>
                           </div>
                         )}
-                        <div className="absolute top-3 right-3">
+                        <div className="absolute top-3 right-3 flex flex-col gap-2">
+                          {item.status === "reserved" && (
+                            <Badge className="bg-yellow-100 text-yellow-800 font-medium">
+                              Reserved
+                            </Badge>
+                          )}
                           <Badge className={`${conditionColors[item.condition] || ''} font-medium`}>
                             {item.condition.replace('_', ' ')}
                           </Badge>

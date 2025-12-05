@@ -35,8 +35,21 @@ export default function Home() {
   const loadRecentItems = async () => {
     try {
       setIsLoading(true);
-      const recentItems = await Item.filter({ status: "available" }, "-created_date", 6);
-      setItems(recentItems);
+      // Fetch both "available" and "reserved" items
+      const [availableItems, reservedItems] = await Promise.all([
+        Item.filter({ status: "available" }, "-created_date", 6),
+        Item.filter({ status: "reserved" }, "-created_date", 6),
+      ]);
+      
+      // Combine and sort by creation date (newest first), then take top 6
+      const allItems = [...availableItems, ...reservedItems]
+        .sort(
+          (a, b) =>
+            new Date(b.created_date || 0).getTime() - new Date(a.created_date || 0).getTime()
+        )
+        .slice(0, 6);
+      
+      setItems(allItems);
     } catch (error) {
       console.error("Error loading items:", error);
     } finally {

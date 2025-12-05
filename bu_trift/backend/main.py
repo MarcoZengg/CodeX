@@ -1589,16 +1589,7 @@ async def accept_buy_request(
         db.add(transaction)
         item.status = "reserved"
         
-        acceptance_message = MessageDB(
-            id=str(uuid.uuid4()),
-            conversation_id=buy_request.conversation_id,
-            sender_id=user.id,
-            content="Buy request accepted! Transaction started.",
-            message_type="text",
-            is_read=False
-        )
-        db.add(acceptance_message)
-        
+        # Update conversation timestamp without creating a message
         conversation = db.query(ConversationDB).filter(ConversationDB.id == buy_request.conversation_id).first()
         if conversation:
             conversation.last_message_at = datetime.now()
@@ -1668,16 +1659,7 @@ async def reject_buy_request(
         buy_request.status = "rejected"
         buy_request.responded_date = datetime.now()
         
-        rejection_message = MessageDB(
-            id=str(uuid.uuid4()),
-            conversation_id=buy_request.conversation_id,
-            sender_id=user.id,
-            content="Buy request declined.",
-            message_type="text",
-            is_read=False
-        )
-        db.add(rejection_message)
-        
+        # Update conversation timestamp without creating a message
         conversation = db.query(ConversationDB).filter(ConversationDB.id == buy_request.conversation_id).first()
         if conversation:
             conversation.last_message_at = datetime.now()
