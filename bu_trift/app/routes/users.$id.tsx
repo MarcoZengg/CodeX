@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router";
-import { Item, Review } from "@/entities";
+import { Item, Review, User } from "@/entities";
 import type { Item as ItemType } from "@/entities/Item";
 import type { Review as ReviewType } from "@/entities/Review";
+import type { User as UserType } from "@/entities/User";
 import {
   Card,
   CardContent,
@@ -26,6 +27,7 @@ export function meta() {
 
 export default function UserProfile() {
   const { id } = useParams();
+  const [user, setUser] = useState<UserType | null>(null);
   const [items, setItems] = useState<ItemType[]>([]);
   const [reviews, setReviews] = useState<ReviewType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -38,6 +40,10 @@ export default function UserProfile() {
   const loadData = async (userId: string) => {
     try {
       setIsLoading(true);
+      // Load user data from backend to get updated rating
+      const userData = await User.getById(userId);
+      setUser(userData);
+      
       const userItems = await Item.filter(
         { seller_id: userId },
         "-created_date"
@@ -55,12 +61,12 @@ export default function UserProfile() {
   };
 
   const reviewCount = reviews.length;
-  const averageRating =
-    reviewCount > 0
-      ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviewCount
-      : null;
+  // Use backend-calculated rating (from user object) instead of calculating from reviews
+  const averageRating = user?.rating ?? (reviewCount > 0
+    ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviewCount
+    : null);
 
-  const displayName = id ? `User ${String(id).slice(0, 4)}` : "BU Student";
+  const displayName = user?.display_name || (id ? `User ${String(id).slice(0, 4)}` : "BU Student");
   const displayInitial = displayName[0]?.toUpperCase() || "U";
 
   if (!id) {
@@ -95,10 +101,18 @@ export default function UserProfile() {
             <CardContent className="relative pt-0 pb-6">
               <div className="flex flex-col md:flex-row items-start md:items-end gap-4">
                 <div className="relative -mt-12">
-                  <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center border-4 border-white shadow-lg">
-                    <span className="text-xl font-bold text-red-600">
-                      {displayInitial}
-                    </span>
+                  <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center border-4 border-white shadow-lg overflow-hidden">
+                    {user?.profile_image_url ? (
+                      <img
+                        src={user.profile_image_url}
+                        alt={displayName}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-xl font-bold text-red-600">
+                        {displayInitial}
+                      </span>
+                    )}
                   </div>
                 </div>
 

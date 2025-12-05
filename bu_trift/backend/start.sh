@@ -11,6 +11,7 @@ from models.conversation import ConversationDB
 from models.message import MessageDB
 from models.buy_request import BuyRequestDB
 from models.transaction import TransactionDB
+from models.review import ReviewDB
 from database import Base, engine
 Base.metadata.create_all(bind=engine)
 print('Database tables created successfully')

@@ -12,6 +12,7 @@ from models.conversation import ConversationDB
 from models.message import MessageDB
 from models.buy_request import BuyRequestDB
 from models.transaction import TransactionDB
+from models.review import ReviewDB
 import uuid
 from datetime import datetime
 import os
@@ -230,6 +231,28 @@ class TransactionUpdate(BaseModel):
     meetup_lng: Optional[float] = None
     status: Optional[str] = None
 
+# Review Pydantic models
+class ReviewCreate(BaseModel):
+    transaction_id: str
+    rating: int  # 1-5
+    comment: Optional[str] = None
+
+class ReviewResponse(BaseModel):
+    id: str
+    transaction_id: str
+    item_id: str
+    reviewer_id: str
+    reviewee_id: str
+    rating: int
+    comment: Optional[str] = None
+    response: Optional[str] = None
+    created_date: str
+    updated_date: str
+
+class ReviewUpdate(BaseModel):
+    comment: Optional[str] = None
+    response: Optional[str] = None  # Only reviewee can add response
+
 
 # ============================
 # Helper Functions
@@ -367,6 +390,28 @@ def transaction_to_response(transaction: TransactionDB) -> TransactionResponse:
         completed_date=transaction.completed_date.isoformat() if transaction.completed_date else None,
     )
 
+
+def review_to_response(review: ReviewDB) -> ReviewResponse:
+    return ReviewResponse(
+        id=review.id,
+        transaction_id=review.transaction_id,
+        item_id=review.item_id,
+        reviewer_id=review.reviewer_id,
+        reviewee_id=review.reviewee_id,
+        rating=review.rating,
+        comment=review.comment,
+        response=review.response,
+        created_date=review.created_date.isoformat() if review.created_date else datetime.now().isoformat(),
+        updated_date=review.updated_date.isoformat() if review.updated_date else datetime.now().isoformat(),
+    )
+
+def calculate_user_rating(user_id: str, db: Session) -> float:
+    """Calculate average rating for a user based on all their reviews."""
+    reviews = db.query(ReviewDB).filter(ReviewDB.reviewee_id == user_id).all()
+    if not reviews:
+        return 0.0
+    total_rating = sum(review.rating for review in reviews)
+    return round(total_rating / len(reviews), 2)
 
 def validate_bu_email(email: str) -> bool:
     return email.lower().endswith("@bu.edu")
@@ -1987,3 +2032,188 @@ async def cancel_transaction(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to cancel transaction: {str(e)}")
+
+
+# ============================
+# Review Endpoints
+# ============================
+
+@app.post("/api/reviews", response_model=ReviewResponse)
+def create_review(
+    review_data: ReviewCreate,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Create a review for a completed transaction. Buyer reviews seller, seller reviews buyer."""
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    
+    # Verify transaction exists and is completed
+    transaction = db.query(TransactionDB).filter(TransactionDB.id == review_data.transaction_id).first()
+    if not transaction:
+        raise HTTPException(404, "Transaction not found")
+    
+    if transaction.status != "completed":
+        raise HTTPException(status_code=400, detail="Can only review completed transactions")
+    
+    # Determine reviewer and reviewee
+    # If current user is buyer, they review seller (and vice versa)
+    if user.id == transaction.buyer_id:
+        reviewer_id = transaction.buyer_id
+        reviewee_id = transaction.seller_id
+    elif user.id == transaction.seller_id:
+        reviewer_id = transaction.seller_id
+        reviewee_id = transaction.buyer_id
+    else:
+        raise HTTPException(status_code=403, detail="You can only review transactions you participated in")
+    
+    # Validate rating
+    if review_data.rating < 1 or review_data.rating > 5:
+        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
+    
+    # Check if user already reviewed this transaction
+    existing_review = db.query(ReviewDB).filter(
+        ReviewDB.transaction_id == review_data.transaction_id,
+        ReviewDB.reviewer_id == reviewer_id
+    ).first()
+    
+    if existing_review:
+        raise HTTPException(status_code=400, detail="You have already reviewed this transaction")
+    
+    try:
+        new_review = ReviewDB(
+            id=str(uuid.uuid4()),
+            transaction_id=review_data.transaction_id,
+            item_id=transaction.item_id,
+            reviewer_id=reviewer_id,
+            reviewee_id=reviewee_id,
+            rating=review_data.rating,
+            comment=review_data.comment,
+            created_date=datetime.now(),
+            updated_date=datetime.now(),
+        )
+        
+        db.add(new_review)
+        db.commit()
+        db.refresh(new_review)
+        
+        # Recalculate and update reviewee's rating
+        new_rating = calculate_user_rating(reviewee_id, db)
+        reviewee = db.query(UserDB).filter(UserDB.id == reviewee_id).first()
+        if reviewee:
+            reviewee.rating = new_rating
+            db.commit()
+        
+        return review_to_response(new_review)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create review: {str(e)}")
+
+
+@app.get("/api/reviews", response_model=List[ReviewResponse])
+def get_reviews(
+    user_id: Optional[str] = Query(None, description="Get reviews for a specific user"),
+    transaction_id: Optional[str] = Query(None, description="Get reviews for a specific transaction"),
+    item_id: Optional[str] = Query(None, description="Get reviews for a specific item"),
+    db: Session = Depends(get_db),
+):
+    """Get reviews. Can filter by user_id, transaction_id, or item_id."""
+    query = db.query(ReviewDB)
+    
+    if user_id:
+        # Get all reviews for a user (as reviewee)
+        query = query.filter(ReviewDB.reviewee_id == user_id)
+    elif transaction_id:
+        query = query.filter(ReviewDB.transaction_id == transaction_id)
+    elif item_id:
+        query = query.filter(ReviewDB.item_id == item_id)
+    else:
+        # If no filter, return empty (or could return error)
+        return []
+    
+    reviews = query.order_by(ReviewDB.created_date.desc()).all()
+    return [review_to_response(review) for review in reviews]
+
+
+@app.get("/api/reviews/{review_id}", response_model=ReviewResponse)
+def get_review(review_id: str, db: Session = Depends(get_db)):
+    """Get a specific review by ID."""
+    review = db.query(ReviewDB).filter(ReviewDB.id == review_id).first()
+    if not review:
+        raise HTTPException(404, "Review not found")
+    return review_to_response(review)
+
+
+@app.put("/api/reviews/{review_id}/response", response_model=ReviewResponse)
+def add_review_response(
+    review_id: str,
+    response_data: ReviewUpdate,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Add a response to a review. Only the reviewee can add a response."""
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    
+    review = db.query(ReviewDB).filter(ReviewDB.id == review_id).first()
+    if not review:
+        raise HTTPException(404, "Review not found")
+    
+    # Only the reviewee can add a response
+    if review.reviewee_id != user.id:
+        raise HTTPException(status_code=403, detail="Only the reviewed user can add a response")
+    
+    if not response_data.response:
+        raise HTTPException(status_code=400, detail="Response text is required")
+    
+    try:
+        review.response = response_data.response
+        review.updated_date = datetime.now()
+        db.commit()
+        db.refresh(review)
+        return review_to_response(review)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to add response: {str(e)}")
+
+
+@app.delete("/api/reviews/{review_id}")
+def delete_review(
+    review_id: str,
+    token_data: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """Delete a review. Only the reviewer can delete their own review."""
+    firebase_uid = token_data["uid"]
+    user = db.query(UserDB).filter(UserDB.firebase_uid == firebase_uid).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+    
+    review = db.query(ReviewDB).filter(ReviewDB.id == review_id).first()
+    if not review:
+        raise HTTPException(404, "Review not found")
+    
+    # Only the reviewer can delete their review
+    if review.reviewer_id != user.id:
+        raise HTTPException(status_code=403, detail="You can only delete your own reviews")
+    
+    try:
+        reviewee_id = review.reviewee_id  # Save before deletion
+        db.delete(review)
+        db.commit()
+        
+        # Recalculate and update reviewee's rating after deletion
+        new_rating = calculate_user_rating(reviewee_id, db)
+        reviewee = db.query(UserDB).filter(UserDB.id == reviewee_id).first()
+        if reviewee:
+            reviewee.rating = new_rating
+            db.commit()
+        
+        return {"message": "Review deleted successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete review: {str(e)}")

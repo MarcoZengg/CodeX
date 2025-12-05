@@ -5,6 +5,7 @@ import type { Conversation as ConversationType } from "./Conversation";
 import type { User as UserType, UserRegister, UserLogin } from "./User";
 import type { BuyRequest as BuyRequestType } from "./BuyRequest";
 import type { Transaction as TransactionType } from "./Transaction";
+import type { Review as ReviewType } from "./Review";
 
 // Import entity classes for re-export
 import { ItemEntity } from "./Item";
@@ -13,6 +14,7 @@ import { ConversationEntity } from "./Conversation";
 import { UserEntity } from "./User";
 import { BuyRequestEntity } from "./BuyRequest";
 import { TransactionEntity } from "./Transaction";
+import { ReviewEntity } from "./Review";
 
 // Note: For type imports, import directly from the source files:
 // import type { Item } from "@/entities/Item";
@@ -25,6 +27,7 @@ export { ConversationEntity };
 export { UserEntity };
 export { BuyRequestEntity };
 export { TransactionEntity };
+export { ReviewEntity };
 
 // Create runtime objects with different internal names to avoid type/value conflicts
 const ItemService = {
@@ -98,6 +101,25 @@ const TransactionService = {
     TransactionEntity.cancel(id),
 };
 
+const ReviewService = {
+  create: async (data: { transaction_id: string; rating: number; comment?: string }): Promise<ReviewType> =>
+    ReviewEntity.create(data),
+  getByUser: async (user_id: string): Promise<ReviewType[]> =>
+    ReviewEntity.getByUser(user_id),
+  getByTransaction: async (transaction_id: string): Promise<ReviewType[]> =>
+    ReviewEntity.getByTransaction(transaction_id),
+  getByItem: async (item_id: string): Promise<ReviewType[]> =>
+    ReviewEntity.getByItem(item_id),
+  get: async (review_id: string): Promise<ReviewType> =>
+    ReviewEntity.get(review_id),
+  addResponse: async (review_id: string, response: string): Promise<ReviewType> =>
+    ReviewEntity.addResponse(review_id, response),
+  delete: async (review_id: string): Promise<void> =>
+    ReviewEntity.delete(review_id),
+  filter: async (filters: Partial<ReviewType>): Promise<ReviewType[]> =>
+    ReviewEntity.filter(filters),
+};
+
 // Export runtime objects as values (this is a value export, not a type)
 // TypeScript will distinguish between: import { Item } (value) vs import type { Item } (type)
 export { ItemService as Item };
@@ -106,3 +128,4 @@ export { ConversationService as Conversation };
 export { UserService as User };
 export { BuyRequestService as BuyRequest };
 export { TransactionService as Transaction };
+export { ReviewService as Review };

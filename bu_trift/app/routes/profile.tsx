@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import type { Route } from "./+types/profile";
-import { User, Item } from "@/entities";
+import { User, Item, Review } from "@/entities";
 import type { User as UserType } from "@/entities/User";
 import type { Item as ItemType } from "@/entities/Item";
+import type { Review as ReviewType } from "@/entities/Review";
 import { Link, useNavigate } from "react-router";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -134,6 +135,8 @@ export default function Profile() {
   const navigate = useNavigate();
   const [user, setUser] = useState<UserType | null>(null);
   const [userItems, setUserItems] = useState<ItemType[]>([]);
+  const [reviews, setReviews] = useState<ReviewType[]>([]);
+  const [reviewers, setReviewers] = useState<Record<string, UserType>>({}); // reviewer_id -> User
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -147,7 +150,51 @@ export default function Profile() {
 
   const loadUserData = async () => {
     try {
-      // Get user from localStorage (stored after login/register)
+      // Try to load fresh user data from backend first (to get updated rating)
+      try {
+        const freshUserData = await User.me();
+        if (freshUserData) {
+          setUser(freshUserData);
+          setIsLoggedIn(true);
+          localStorage.setItem("currentUser", JSON.stringify(freshUserData));
+          
+          // Load user's items if user has an ID
+          if (freshUserData.id) {
+            const items = await Item.filter({ seller_id: freshUserData.id }, "-created_date");
+            setUserItems(items);
+            
+            // Load reviews received by this user (where they are the reviewee)
+            try {
+              const userReviews = await Review.getByUser(freshUserData.id);
+              setReviews(userReviews);
+              
+              // Load reviewer information for all reviews
+              const reviewerIds = [...new Set(userReviews.map(r => r.reviewer_id))];
+              const reviewerData: Record<string, UserType> = {};
+              for (const reviewerId of reviewerIds) {
+                try {
+                  const reviewer = await User.getById(reviewerId);
+                  if (reviewer) {
+                    reviewerData[reviewerId] = reviewer;
+                  }
+                } catch (error) {
+                  console.error(`Error loading reviewer ${reviewerId}:`, error);
+                }
+              }
+              setReviewers(reviewerData);
+            } catch (error) {
+              console.error("Error loading reviews:", error);
+              setReviews([]);
+            }
+          }
+          setIsLoading(false);
+          return;
+        }
+      } catch (apiError) {
+        console.warn("Could not load user from API, falling back to localStorage:", apiError);
+      }
+      
+      // Fallback to localStorage if API call fails
       const storedUser = localStorage.getItem("currentUser");
       
       if (storedUser) {
@@ -160,6 +207,30 @@ export default function Profile() {
           if (currentUser.id) {
             const items = await Item.filter({ seller_id: currentUser.id }, "-created_date");
             setUserItems(items);
+            
+            // Load reviews received by this user (where they are the reviewee)
+            try {
+              const userReviews = await Review.getByUser(currentUser.id);
+              setReviews(userReviews);
+              
+              // Load reviewer information for all reviews
+              const reviewerIds = [...new Set(userReviews.map(r => r.reviewer_id))];
+              const reviewerData: Record<string, UserType> = {};
+              for (const reviewerId of reviewerIds) {
+                try {
+                  const reviewer = await User.getById(reviewerId);
+                  if (reviewer) {
+                    reviewerData[reviewerId] = reviewer;
+                  }
+                } catch (error) {
+                  console.error(`Error loading reviewer ${reviewerId}:`, error);
+                }
+              }
+              setReviewers(reviewerData);
+            } catch (error) {
+              console.error("Error loading reviews:", error);
+              setReviews([]);
+            }
           }
         } catch (parseError) {
           console.error("Error parsing stored user:", parseError);
@@ -380,10 +451,11 @@ export default function Profile() {
           transition={{ duration: 0.6, delay: 0.2 }}
         >
           <Tabs defaultValue="active" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="active">Active ({userItems.filter(item => item.status === "available").length})</TabsTrigger>
               <TabsTrigger value="sold">Sold ({userItems.filter(item => item.status === "sold").length})</TabsTrigger>
               <TabsTrigger value="all">All ({userItems.length})</TabsTrigger>
+              <TabsTrigger value="reviews">Reviews ({reviews.length})</TabsTrigger>
             </TabsList>
 
             {deleteError && (
@@ -424,6 +496,82 @@ export default function Profile() {
                 deletingId={deletingId}
                 updatingId={updatingId}
               />
+            </TabsContent>
+            
+            <TabsContent value="reviews" className="mt-6">
+              {reviews.length === 0 ? (
+                <div className="text-center py-12">
+                  <Star className="w-16 h-16 text-neutral-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-neutral-900 mb-2">No reviews yet</h3>
+                  <p className="text-neutral-600">You haven't received any reviews from other users yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {reviews.map((review) => {
+                    const reviewer = reviewers[review.reviewer_id];
+                    const reviewerName = reviewer?.display_name || "Anonymous User";
+                    const reviewerImage = reviewer?.profile_image_url || null;
+                    
+                    return (
+                      <Card key={review.id} className="border-neutral-200/60">
+                        <CardContent className="p-4">
+                          <div className="flex items-start gap-4">
+                            {/* Reviewer Avatar */}
+                            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center border-2 border-red-200 flex-shrink-0 overflow-hidden">
+                              {reviewerImage ? (
+                                <img
+                                  src={reviewerImage}
+                                  alt={reviewerName}
+                                  className="w-full h-full rounded-full object-cover"
+                                />
+                              ) : (
+                                <span className="text-red-600 font-bold text-lg">
+                                  {reviewerName[0]?.toUpperCase() || "U"}
+                                </span>
+                              )}
+                            </div>
+                            
+                            {/* Review Content */}
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-2">
+                                <div>
+                                  <h4 className="font-semibold text-neutral-900">{reviewerName}</h4>
+                                  <p className="text-xs text-neutral-500">
+                                    {review.created_date ? new Date(review.created_date).toLocaleDateString() : ""}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <Star
+                                      key={star}
+                                      className={`w-4 h-4 ${
+                                        star <= review.rating
+                                          ? "text-yellow-400 fill-yellow-400"
+                                          : "text-neutral-300"
+                                      }`}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                              
+                              {review.comment && (
+                                <p className="text-neutral-700 mt-2">{review.comment}</p>
+                              )}
+                              
+                              {review.response && (
+                                <div className="mt-3 pl-4 border-l-2 border-neutral-200">
+                                  <p className="text-xs text-neutral-500 mb-1">Your Response:</p>
+                                  <p className="text-neutral-700">{review.response}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </motion.div>
