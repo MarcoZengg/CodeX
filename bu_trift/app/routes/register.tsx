@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { motion } from "framer-motion";
-import { UserPlus, Mail, Lock, User as UserIcon, FileText, Info } from "lucide-react";
+import { UserPlus, Mail, Lock, User as UserIcon, FileText, Info, Eye, EyeOff } from "lucide-react";
 
 // Firebase imports
 import { auth } from "@/config/firebase";
@@ -31,11 +31,14 @@ export default function Register(_props: Route.ComponentProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fromGoogleLogin, setFromGoogleLogin] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     display_name: "",
     bio: "",
     password: "",
+    confirmPassword: "",
   });
 
   // Check if redirected from Google login
@@ -55,7 +58,7 @@ export default function Register(_props: Route.ComponentProps) {
 
     try {
       // Required fields (password stays only on frontend for Firebase)
-      if (!formData.email || !formData.password || !formData.display_name) {
+      if (!formData.email || !formData.password || !formData.confirmPassword || !formData.display_name) {
         setError("Please fill in all required fields");
         setIsSubmitting(false);
         return;
@@ -71,6 +74,13 @@ export default function Register(_props: Route.ComponentProps) {
       // Validate password length
       if (formData.password.length < 6) {
         setError("Password must be at least 6 characters long");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Confirm password match
+      if (formData.password !== formData.confirmPassword) {
+        setError("Passwords do not match");
         setIsSubmitting(false);
         return;
       }
@@ -311,14 +321,50 @@ export default function Register(_props: Route.ComponentProps) {
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-neutral-400" />
                   <Input
                     id="password"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     placeholder="At least 6 characters"
                     value={formData.password}
                     onChange={(e) => handleChange("password", e.target.value)}
-                    className="pl-10 h-12"
+                    className="pl-10 h-12 pr-12"
                     required
                     minLength={6}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-700"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Confirm Password */}
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword" className="text-neutral-700 font-semibold">
+                  Confirm Password <span className="text-red-600">*</span>
+                </Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-neutral-400" />
+                  <Input
+                    id="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="Re-enter your password"
+                    value={formData.confirmPassword}
+                    onChange={(e) => handleChange("confirmPassword", e.target.value)}
+                    className="pl-10 h-12 pr-12"
+                    required
+                    minLength={6}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-700"
+                    aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
                 </div>
               </div>
 
