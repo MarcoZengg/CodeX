@@ -6,11 +6,15 @@ import type { User as UserType } from "@/entities/User";
 import type { Message as MessageType } from "@/entities/Message";
 import type { BuyRequest as BuyRequestType } from "@/entities/BuyRequest";
 import type { Transaction as TransactionType } from "@/entities/Transaction";
+import type { Item as ItemType } from "@/entities/Item";
 import { MessageEntity } from "@/entities/Message";
 import { WebSocketClient } from "@/utils/websocket";
 import { API_URL } from "@/config";
-import { useNavigate } from "react-router";
+import { useNavigate, Link } from "react-router";
 import { createPageUrl } from "@/utils";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Package } from "lucide-react";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -35,7 +39,7 @@ function BuyRequestMessageComponent({
   onReject: () => void;
   onCancel: () => void;
 }) {
-  const [item, setItem] = useState<any>(null);
+  const [item, setItem] = useState<ItemType | null>(null);
   const [loading, setLoading] = useState(true);
   
   useEffect(() => {
@@ -92,10 +96,127 @@ function BuyRequestMessageComponent({
       </div>
       
       {item && (
-        <div style={{ marginBottom: 12 }}>
-          <p style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px 0" }}>Item: {item.title}</p>
-          <p style={{ fontSize: 16, fontWeight: 700, color: "#dc2626", margin: 0 }}>${item.price}</p>
-        </div>
+        <Link to={`/items/${item.id}`} style={{ textDecoration: "none", color: "inherit" }}>
+          <Card 
+            style={{
+              marginBottom: 12,
+              border: "1px solid #e5e5e5",
+              borderRadius: 8,
+              overflow: "hidden",
+              cursor: "pointer",
+              transition: "all 0.2s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.boxShadow = "0 4px 6px rgba(0, 0, 0, 0.1)";
+              e.currentTarget.style.transform = "translateY(-2px)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.boxShadow = "none";
+              e.currentTarget.style.transform = "translateY(0)";
+            }}
+          >
+            <div style={{ display: "flex", gap: 12 }}>
+              {/* Item Image */}
+              <div
+                style={{
+                  width: 120,
+                  height: 120,
+                  backgroundColor: "#f5f5f5",
+                  flexShrink: 0,
+                  position: "relative",
+                  overflow: "hidden",
+                }}
+              >
+                {item.images?.[0] ? (
+                  <img
+                    src={item.images[0]}
+                    alt={item.title}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Package style={{ width: 32, height: 32, color: "#999" }} />
+                  </div>
+                )}
+                <div style={{ position: "absolute", top: 8, right: 8 }}>
+                  <Badge
+                    style={{
+                      fontSize: 10,
+                      padding: "2px 6px",
+                      backgroundColor:
+                        item.status === "available" ? "#d1fae5" : "#fee2e2",
+                      color:
+                        item.status === "available" ? "#065f46" : "#991b1b",
+                      border: "none",
+                    }}
+                  >
+                    {item.status}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Item Details */}
+              <CardContent
+                style={{
+                  padding: 12,
+                  flex: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                }}
+              >
+                <div>
+                  <h4
+                    style={{
+                      fontSize: 16,
+                      fontWeight: 600,
+                      margin: "0 0 4px 0",
+                      color: "#111",
+                    }}
+                  >
+                    {item.title}
+                  </h4>
+                  {item.condition && (
+                    <Badge
+                      style={{
+                        fontSize: 11,
+                        padding: "2px 6px",
+                        marginBottom: 8,
+                        backgroundColor: "#f3f4f6",
+                        color: "#374151",
+                        border: "none",
+                      }}
+                    >
+                      {item.condition.replace("_", " ")}
+                    </Badge>
+                  )}
+                </div>
+                <p
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 700,
+                    color: "#dc2626",
+                    margin: 0,
+                  }}
+                >
+                  ${item.price}
+                </p>
+              </CardContent>
+            </div>
+          </Card>
+        </Link>
       )}
       
       {buyRequest.status === "pending" && isSeller && (
