@@ -44,9 +44,11 @@ export default function ItemDetail({ params }: Route.ComponentProps) {
   const itemId = params.id;
 
   useEffect(() => {
-    if (itemId) {
-      loadItemAndSeller(itemId);
+    if (!itemId) {
+      setIsLoading(false);
+      return;
     }
+    loadItemAndSeller(itemId);
     // Get current user from localStorage (actual logged-in user)
     // Only set currentUser if there's a real logged-in user
     const storedUser = localStorage.getItem("currentUser");
@@ -74,9 +76,12 @@ export default function ItemDetail({ params }: Route.ComponentProps) {
     setIsLoading(true);
     try {
       const itemData = await Item.get(id);
+      if (!itemData.seller_id) {
+        throw new Error("Item is missing seller information");
+      }
       const userData = await User.getById(itemData.seller_id);
       setItem(itemData);
-      if (itemData.seller_id) {
+      if (itemData.seller_id && userData) {
         const sellerData = {
           id: itemData.seller_id,
           display_name: userData.display_name,
@@ -86,6 +91,8 @@ export default function ItemDetail({ params }: Route.ComponentProps) {
           is_verified: userData.is_verified,
         };
         setSeller(sellerData);
+      } else {
+        console.warn("Seller data missing for item", id);
       }
       
       // Check for existing buy request if user is logged in

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import type { Route } from "./+types/messages";
-import { Conversation, User, Message, BuyRequest, Transaction, Item } from "@/entities";
-import type { Conversation as ConversationType } from "@/entities/Conversation";
+import { User, Message, BuyRequest, Transaction, Item } from "@/entities";
+import type { Conversation as BaseConversation } from "@/entities/Message";
 import type { User as UserType } from "@/entities/User";
 import type { Message as MessageType } from "@/entities/Message";
 import type { BuyRequest as BuyRequestType } from "@/entities/BuyRequest";
@@ -325,6 +325,7 @@ function BuyRequestMessageComponent({
 
 export default function Messages() {
   const [currentUser, setCurrentUser] = useState<UserType | null>(null);
+  type ConversationType = BaseConversation & { participant_ids?: string[] };
   const [conversations, setConversations] = useState<ConversationType[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -340,6 +341,11 @@ export default function Messages() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
+  const formatConversations = (convs: BaseConversation[]): ConversationType[] =>
+    convs.map((conv) => ({
+      ...conv,
+      participant_ids: [conv.participant1_id, conv.participant2_id],
+    }));
   
   // Buy request and transaction state
   const [buyRequests, setBuyRequests] = useState<BuyRequestType[]>([]);
@@ -367,10 +373,7 @@ export default function Messages() {
               // Load conversations from API
               const conversations = await MessageEntity.getConversations(user.id);
               // Add backward compatibility fields
-              const formattedConversations = conversations.map((conv) => ({
-                ...conv,
-                participant_ids: [conv.participant1_id, conv.participant2_id],
-              }));
+              const formattedConversations = formatConversations(conversations);
               setConversations(formattedConversations);
               setUnreadTotal(
                 formattedConversations.reduce(
@@ -468,7 +471,11 @@ export default function Messages() {
                     if (!conversationExists && currentUser?.id) {
                       // Reload conversations to include the new one
                       MessageEntity.getConversations(currentUser.id).then((updatedConvs) => {
-                        setConversations(updatedConvs);
+                        const formatted = formatConversations(updatedConvs);
+                        setConversations(formatted);
+                        setUnreadTotal(
+                          formatted.reduce((sum, conv) => sum + (conv.unread_count ?? 0), 0)
+                        );
                       }).catch(console.error);
                     }
                     

@@ -43,9 +43,10 @@ function ItemGrid({ items, onDelete, onMarkSold, onEdit, deletingId, updatingId 
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 md:grid-cols-3">
       {items.map((item) => {
         if (!item.id) return null; // Guard against undefined ids
+        const itemId = item.id;
         return (
-          <Card key={item.id} className="overflow-hidden hover:shadow-lg transition-shadow duration-300 border-neutral-200/60">
-            <Link to={`/items/${item.id}`} className="block">
+          <Card key={itemId} className="overflow-hidden hover:shadow-lg transition-shadow duration-300 border-neutral-200/60">
+            <Link to={`/items/${itemId}`} className="block">
               <div className="aspect-square bg-neutral-100 relative overflow-hidden">
                 {item.images?.[0] ? (
                   <img
@@ -81,7 +82,7 @@ function ItemGrid({ items, onDelete, onMarkSold, onEdit, deletingId, updatingId 
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      onEdit(item.id);
+                      onEdit(itemId);
                     }}
                   >
                     Edit listing
@@ -91,28 +92,28 @@ function ItemGrid({ items, onDelete, onMarkSold, onEdit, deletingId, updatingId 
                   <Button
                     variant="secondary"
                     className="w-full"
-                    disabled={updatingId === item.id}
+                    disabled={updatingId === itemId}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      onMarkSold(item.id);
+                      onMarkSold(itemId);
                     }}
                   >
-                    {updatingId === item.id ? "Marking..." : "Mark as sold"}
+                    {updatingId === itemId ? "Marking..." : "Mark as sold"}
                   </Button>
                 )}
-                {onDelete && (
+                {onDelete && item.status !== "sold" && (
                   <Button
                     variant="outline"
                     className="w-full border-red-200 text-red-700 hover:bg-red-50"
-                    disabled={deletingId === item.id}
+                    disabled={deletingId === itemId}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      onDelete(item.id);
+                      onDelete(itemId);
                     }}
                   >
-                    {deletingId === item.id ? "Removing..." : "Remove listing"}
+                    {deletingId === itemId ? "Removing..." : "Remove listing"}
                   </Button>
                 )}
               </div>
@@ -249,6 +250,11 @@ export default function Profile() {
   };
 
   const handleDeleteItem = async (itemId: string) => {
+    const target = userItems.find((i) => i.id === itemId);
+    if (target?.status === "sold") {
+      setDeleteError("Sold listings cannot be removed.");
+      return;
+    }
     const confirmed = window.confirm("Remove this listing? Buyers will no longer see it.");
     if (!confirmed) return;
 

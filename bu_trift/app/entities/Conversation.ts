@@ -15,7 +15,8 @@ export interface Conversation {
   item_title?: string;
   item_image_url?: string;
   participant_ids?: string[]; // For backward compatibility
-  last_message_snippet?: string; // For backward compatibility
+  last_message_snippet?: string | null; // For backward compatibility and API responses
+  unread_count?: number;
 }
 
 // Helper function to get auth headers
