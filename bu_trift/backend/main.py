@@ -27,7 +27,15 @@ from dependencies import get_current_user
 from utils.db_utils import get_or_404
 
 # Ensure firebase_admin initializes
-import firebase_config  # noqa: F401
+# Optional Firebase initialization
+try:
+    import firebase_config  # noqa: F401
+except Exception as e:
+    import logging
+    logging.getLogger(__name__).warning(
+        f"Firebase could not be initialized (ignored during tests): {e}"
+    )
+
 
 # Import Cloudinary storage helper
 from storage import upload_file_to_cloudinary
