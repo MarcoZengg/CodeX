@@ -14,7 +14,7 @@ def make_creds(token: str) -> HTTPAuthorizationCredentials:
     return HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
 
-@pytest.mark.anyio
+@pytest.mark.anyio(backend="asyncio")
 async def test_verify_firebase_token_success(monkeypatch):
     """
     Happy path:
@@ -41,7 +41,7 @@ async def test_verify_firebase_token_success(monkeypatch):
     assert decoded["email"] == "student@bu.edu"
 
 
-@pytest.mark.anyio
+@pytest.mark.anyio(backend="asyncio")
 async def test_verify_firebase_token_invalid_format(monkeypatch):
     """
     verify_id_token raises ValueError → should become HTTP 401 with
@@ -67,7 +67,7 @@ async def test_verify_firebase_token_invalid_format(monkeypatch):
     assert "Invalid Firebase token format" in err.detail
 
 
-@pytest.mark.anyio
+@pytest.mark.anyio(backend="asyncio")
 async def test_verify_firebase_token_expired(monkeypatch):
     """
     verify_id_token raises ExpiredIdTokenError → should become HTTP 401 with
@@ -97,7 +97,7 @@ async def test_verify_firebase_token_expired(monkeypatch):
     assert "Firebase token has expired" in err.detail
 
 
-@pytest.mark.anyio
+@pytest.mark.anyio(backend="asyncio")
 async def test_verify_firebase_token_invalid(monkeypatch):
     """
     verify_id_token raises InvalidIdTokenError → should become HTTP 401 with
@@ -127,7 +127,7 @@ async def test_verify_firebase_token_invalid(monkeypatch):
     assert "Invalid Firebase token" in err.detail
 
 
-@pytest.mark.anyio
+@pytest.mark.anyio(backend="asyncio")
 async def test_verify_firebase_token_unexpected_error(monkeypatch):
     """
     Any other exception → HTTP 401 with 'Failed to verify Firebase token'.

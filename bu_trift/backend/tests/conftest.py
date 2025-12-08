@@ -8,6 +8,19 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 # -------------------------------------------------------------------
+# Configure anyio to only use asyncio backend (trio not installed)
+# -------------------------------------------------------------------
+def pytest_collection_modifyitems(config, items):
+    """Filter out trio backend parametrizations from anyio tests"""
+    # Remove trio backend parametrizations since trio is not installed
+    for item in items[:]:
+        # Check if this is a trio backend parametrization
+        if hasattr(item, 'callspec') and item.callspec:
+            params = item.callspec.params
+            if 'anyio_backend' in params and params['anyio_backend'] == 'trio':
+                items.remove(item)
+
+# -------------------------------------------------------------------
 # Make sure we can import backend modules (main, database, models, etc.)
 # -------------------------------------------------------------------
 CURRENT_DIR = Path(__file__).resolve().parent       # .../backend/tests

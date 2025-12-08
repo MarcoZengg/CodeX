@@ -7,3 +7,5 @@ firebase-admin
 psycopg2-binary
 cloudinary
 python-dotenv
+pytest
+pytest-cov

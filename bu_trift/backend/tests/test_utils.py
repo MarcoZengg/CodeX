@@ -158,7 +158,7 @@ def test_handle_db_operation_wraps_generic_exception(db):
 
 import pytest
 
-@pytest.mark.anyio
+@pytest.mark.anyio(backend="asyncio")
 async def test_verify_websocket_token_success(monkeypatch):
     """
     Happy path: verify_websocket_token should call firebase_auth.verify_id_token
@@ -190,7 +190,7 @@ async def test_verify_websocket_token_success(monkeypatch):
 
 
 
-@pytest.mark.anyio
+@pytest.mark.anyio(backend="asyncio")
 async def test_verify_websocket_token_failure_returns_none(monkeypatch):
     """
     When firebase_auth.verify_id_token raises, verify_websocket_token
