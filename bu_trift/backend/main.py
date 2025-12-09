@@ -903,29 +903,52 @@ class ConnectionManager:
         else:
             logger.warning(f"User {user_id} has no active WebSocket connections - message type: {message.get('type', 'unknown')}")
     
-    async def broadcast_to_conversation(self, message: dict, conversation_id: str, sender_id: str, db: Session):
-        """Send message to all participants in a conversation (except sender)"""
-        # Get conversation participants
-        conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
-        if not conversation:
-            return
+    async def broadcast_to_conversation(self, message: dict, conversation_id: str, sender_id: str, db: Session = None, participant1_id: str = None, participant2_id: str = None):
+        """Send message to all participants in a conversation (except sender)
         
-        participants = [conversation.participant1_id, conversation.participant2_id]
+        Optimized: Accepts participant IDs directly to avoid redundant DB query.
+        Falls back to DB query if participant IDs not provided (backward compatibility).
+        """
+        participants = None
+        if participant1_id and participant2_id:
+            # Use provided participant IDs (avoid DB query)
+            participants = [participant1_id, participant2_id]
+        elif db:
+            # Fallback to DB query if IDs not provided
+            conversation = db.query(ConversationDB).filter(ConversationDB.id == conversation_id).first()
+            if not conversation:
+                return
+            participants = [conversation.participant1_id, conversation.participant2_id]
+        else:
+            logger.warning(f"Cannot broadcast to conversation {conversation_id}: no participant IDs or DB session provided")
+            return
         
         # Send to all participants except sender
         for participant_id in participants:
             if participant_id != sender_id:
                 await self.send_personal_message(message, participant_id)
     
-    async def broadcast_to_transaction(self, message: dict, transaction_id: str, sender_id: str, db: Session):
-        """Send message to both buyer and seller of a transaction (except sender)"""
-        from models.transaction import TransactionDB
-        transaction = db.query(TransactionDB).filter(TransactionDB.id == transaction_id).first()
-        if not transaction:
-            logger.warning(f"Transaction {transaction_id} not found for broadcast")
-            return
+    async def broadcast_to_transaction(self, message: dict, transaction_id: str, sender_id: str, db: Session = None, buyer_id: str = None, seller_id: str = None):
+        """Send message to both buyer and seller of a transaction (except sender)
         
-        participants = [transaction.buyer_id, transaction.seller_id]
+        Optimized: Accepts buyer/seller IDs directly to avoid redundant DB query.
+        Falls back to DB query if IDs not provided (backward compatibility).
+        """
+        participants = None
+        if buyer_id and seller_id:
+            # Use provided participant IDs (avoid DB query)
+            participants = [buyer_id, seller_id]
+        elif db:
+            # Fallback to DB query if IDs not provided
+            from models.transaction import TransactionDB
+            transaction = db.query(TransactionDB).filter(TransactionDB.id == transaction_id).first()
+            if not transaction:
+                logger.warning(f"Transaction {transaction_id} not found for broadcast")
+                return
+            participants = [transaction.buyer_id, transaction.seller_id]
+        else:
+            logger.warning(f"Cannot broadcast to transaction {transaction_id}: no participant IDs or DB session provided")
+            return
         
         logger.info(f"Broadcasting transaction update to participants: {participants}, sender: {sender_id}")
         
@@ -1189,6 +1212,7 @@ async def create_message(
         message_response = message_to_response(new_message)
         
         # Broadcast new message via WebSocket to conversation participants
+        # Pass participant IDs directly to avoid redundant DB query
         await manager.broadcast_to_conversation(
             {
                 "type": "new_message",
@@ -1196,7 +1220,9 @@ async def create_message(
             },
             message.conversation_id,
             message.sender_id,
-            db
+            db,
+            participant1_id=conversation.participant1_id,
+            participant2_id=conversation.participant2_id
         )
         
         return message_response
@@ -1753,6 +1779,7 @@ async def create_transaction_with_appointment(
             
             # Broadcast transaction update via WebSocket
             transaction_response = transaction_to_response(existing_transaction)
+            # Pass participant IDs directly to avoid redundant DB queries
             await manager.broadcast_to_transaction(
                 {
                     "type": "transaction_update",
@@ -1760,7 +1787,9 @@ async def create_transaction_with_appointment(
                 },
                 existing_transaction.id,
                 user.id,
-                db
+                db,
+                buyer_id=existing_transaction.buyer_id,
+                seller_id=existing_transaction.seller_id
             )
             
             await manager.broadcast_to_conversation(
@@ -1770,7 +1799,9 @@ async def create_transaction_with_appointment(
                 },
                 conversation_id,
                 user.id,
-                db
+                db,
+                participant1_id=conversation.participant1_id,
+                participant2_id=conversation.participant2_id
             )
             
             return transaction_response
@@ -1818,6 +1849,7 @@ async def create_transaction_with_appointment(
             
             # Broadcast transaction creation via WebSocket
             transaction_response = transaction_to_response(transaction)
+            # Pass participant IDs directly to avoid redundant DB queries
             await manager.broadcast_to_transaction(
                 {
                     "type": "transaction_created",
@@ -1825,10 +1857,12 @@ async def create_transaction_with_appointment(
                 },
                 transaction.id,
                 user.id,
-                db
+                db,
+                buyer_id=transaction.buyer_id,
+                seller_id=transaction.seller_id
             )
             
-            # Also broadcast to conversation
+            # Also broadcast to conversation (pass participant IDs directly)
             await manager.broadcast_to_conversation(
                 {
                     "type": "transaction_created",
@@ -1836,7 +1870,9 @@ async def create_transaction_with_appointment(
                 },
                 conversation_id,
                 user.id,
-                db
+                db,
+                participant1_id=conversation.participant1_id,
+                participant2_id=conversation.participant2_id
             )
             
             return transaction_response
@@ -1989,6 +2025,7 @@ async def update_transaction(
         
         # Broadcast transaction update via WebSocket to both buyer and seller
         transaction_response = transaction_to_response(transaction)
+        # Pass participant IDs directly to avoid redundant DB query
         await manager.broadcast_to_transaction(
             {
                 "type": "transaction_update",
@@ -1996,7 +2033,9 @@ async def update_transaction(
             },
             transaction_id,
             user.id,
-            db
+            db,
+            buyer_id=transaction.buyer_id,
+            seller_id=transaction.seller_id
         )
         
         return transaction_response
@@ -2052,6 +2091,7 @@ async def cancel_transaction(
         
         # Broadcast transaction update via WebSocket
         transaction_response = transaction_to_response(transaction)
+        # Pass participant IDs directly to avoid redundant DB query
         await manager.broadcast_to_transaction(
             {
                 "type": "transaction_update",
@@ -2059,7 +2099,9 @@ async def cancel_transaction(
             },
             transaction_id,
             user.id,
-            db
+            db,
+            buyer_id=transaction.buyer_id,
+            seller_id=transaction.seller_id
         )
         
         return transaction_response

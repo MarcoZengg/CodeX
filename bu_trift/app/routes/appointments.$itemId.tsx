@@ -163,30 +163,45 @@ export default function AppointmentSetup({ params }: Route.ComponentProps) {
       const token = await getFirebaseToken(false);
       if (!token) throw new Error("You must be logged in.");
       
-      const response = await fetchWithAuth(`${API_URL}/api/transactions/create-with-appointment`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          item_id: item.id,
-          conversation_id: conversationId,
-          meetup_place: meetupPlace.trim(),
-          meetup_time: meetupDateTime.toISOString(),
-        }),
-      });
+      // Create abort controller for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
       
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `Failed to set up appointment: ${response.statusText}`);
+      try {
+        const response = await fetchWithAuth(`${API_URL}/api/transactions/create-with-appointment`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            item_id: item.id,
+            conversation_id: conversationId,
+            meetup_place: meetupPlace.trim(),
+            meetup_time: meetupDateTime.toISOString(),
+          }),
+          signal: controller.signal, // Add timeout signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.detail || `Failed to set up appointment: ${response.statusText}`);
+        }
+        
+        const transaction = await response.json();
+        
+        // Navigate to messages page with conversationId
+        const targetConversationId = conversationIdParam || conversationId;
+        navigate(`${createPageUrl("Messages")}?conversationId=${targetConversationId}`);
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          throw new Error("Request timed out. The server may be slow. Please try again.");
+        }
+        throw fetchError;
       }
-      
-      const transaction = await response.json();
-      
-      // Navigate to messages page with conversationId
-      const targetConversationId = conversationIdParam || conversationId;
-      navigate(`${createPageUrl("Messages")}?conversationId=${targetConversationId}`);
     } catch (error: any) {
       console.error("Error setting up appointment:", error);
       alert(error.message || "Failed to set up appointment. Please try again.");

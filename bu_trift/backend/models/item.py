@@ -12,8 +12,15 @@ else:
 
 from database import Base
 
+from sqlalchemy import Index
+
 class ItemDB(Base):
     __tablename__ = "items"
+    
+    __table_args__ = (
+        Index('idx_item_seller_status', 'seller_id', 'status'),  # For filtering user's items by status
+        Index('idx_item_status_created', 'status', 'created_date'),  # For homepage featured items
+    )
     
     id = Column(String, primary_key=True, index=True)
     title = Column(String, nullable=False)
@@ -21,8 +28,8 @@ class ItemDB(Base):
     price = Column(Float, nullable=False)
     category = Column(String, nullable=False)
     condition = Column(String, nullable=False)
-    seller_id = Column(String, nullable=False)
-    status = Column(String, default="available")
+    seller_id = Column(String, nullable=False, index=True)  # ADDED INDEX
+    status = Column(String, default="available", index=True)  # ADDED INDEX
     location = Column(String)
     is_negotiable = Column(Boolean, default=False)
     created_date = Column(DateTime, server_default=func.now())
