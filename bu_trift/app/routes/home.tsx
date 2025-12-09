@@ -10,8 +10,6 @@ import { motion } from "framer-motion";
 
 import HeroSection from "../components/home/HeroSection";
 import FeaturedItems from "../components/home/FeaturedItems";
-import CategoryGrid from "../components/home/CategoryGrid";
-import CommunityStats from "../components/home/CommunityStats";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -70,8 +68,6 @@ export default function Home() {
       
       <div className="max-w-7xl mx-auto px-6 py-16 space-y-20">
         <FeaturedItems items={items} isLoading={isLoading} />
-        <CategoryGrid />
-        <CommunityStats />
         
         {/* About Us Highlight */}
         <motion.div
