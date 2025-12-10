@@ -35,10 +35,10 @@ BUThrift is a campus marketplace platform designed exclusively for Boston Univer
 
 All team members have contributed to the codebase:
 
-- **Kenneth Chen**:  Testing suite, code coverage improvements, deployment coordination
-- **Minjun Kim**:  Database administration, security features, Backend development, frontend development
-- **Jerry Teixeira**: Frontend development, frontend development, authentication features, Firebase integration, backend development
-- **MarcoZengg (Xiankun Zeng)**: Backend development, Frontend development, Firebase integration, transaction system, performance optimization
+- **Kenneth Chen**:  Mainly focus on Testing suite, code coverage improvements, deployment coordination
+- **Minjun Kim**:  Mainly focus on Database administration, security features, Backend development, frontend development
+- **Jerry Teixeira**: Mainly focus on Frontend development, frontend development, authentication features, Firebase integration, backend development
+- **MarcoZengg (Xiankun Zeng)**: Mainly focus on Backend development, Frontend development, Firebase integration, transaction system, performance optimization
 
 
 All team members have actively contributed across frontend, backend, testing, database administration, and documentation, demonstrating collaborative development throughout the project lifecycle.
