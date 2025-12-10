@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 # BUThrift - Campus Marketplace
 
 > Boston University's trusted marketplace for sustainable student living
