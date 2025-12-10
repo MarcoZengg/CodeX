@@ -8,9 +8,9 @@ BUThrift is a full-stack web application that enables BU students to buy and sel
 ## 📋 Table of Contents
 
 - [Project Overview](#-project-overview)
-- [Live Deployment](#-live-deployment)
 - [Team Members](#-team-members)
 - [Contribution](#-contribution)
+- [Live Deployment](#-live-deployment)
 - [Getting Started](#-getting-started)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
@@ -27,10 +27,10 @@ BUThrift is a campus marketplace platform designed exclusively for Boston Univer
 
 ## 👥 Team Members
 
-- **Kenneth Chen (U01705999)** - Lead Testing Engineer
-- **Minjun Kim (U18012972)** - Backend Developer 
-- **Jerry Teixeira (U61825071)** - Full stack (specialized in front-end)
-- **Xiankun Zeng (U54725278)** - Full stack (specialized in backend)
+- **Kenneth Chen** - Lead Testing Engineer
+- **Minjun Kim** - Backend Developer 
+- **Jerry Teixeira** - Full stack (specialized in front-end)
+- **Xiankun Zeng** - Full stack (specialized in backend)
 
 ## 📊 Contribution
 
