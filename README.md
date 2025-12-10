@@ -8,6 +8,7 @@ BUThrift is a full-stack web application that enables BU students to buy and sel
 ## 📋 Table of Contents
 
 - [Project Overview](#-project-overview)
+- [Live Deployment](#-live-deployment)
 - [Team Members](#-team-members)
 - [Contribution](#-contribution)
 - [Getting Started](#-getting-started)
@@ -23,6 +24,16 @@ BUThrift is a full-stack web application that enables BU students to buy and sel
 BUThrift is a campus marketplace platform designed exclusively for Boston University students. The platform promotes sustainability, affordability, and community building while ensuring a safe trading environment through Firebase authentication, real-time messaging via WebSocket, and comprehensive transaction management.
 
 **Project Path**: `Project/CodeX/bu_trift/`
+
+## 🌐 Live Deployment
+
+The application is deployed and accessible online:
+
+- **Production URL**: [https://butrift-frontend.onrender.com](https://butrift-frontend.onrender.com)
+- **Platform**: Render (Cloud hosting)
+- **Status**: Fully operational with backend API and frontend web application
+
+The deployed version includes all core features: user authentication, item listings, real-time messaging, transaction management, and review system. You can access the live application using the link above, or follow the setup instructions below to run it locally for development.
 
 ## 👥 Team Members
 
@@ -301,10 +312,6 @@ bu_trift/
 - **Real-time**: WebSocket (FastAPI native)
 
 ---
-
-## 🌐 Website
-
-- **Deployed to Render**: https://butrift-frontend.onrender.com
 
 **Course**: CS-411 Software Engineering  
 **Domain**: Sustainability  
