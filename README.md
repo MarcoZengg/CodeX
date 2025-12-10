@@ -25,16 +25,6 @@ BUThrift is a campus marketplace platform designed exclusively for Boston Univer
 
 **Project Path**: `Project/CodeX/bu_trift/`
 
-## 🌐 Live Deployment
-
-The application is deployed and accessible online:
-
-- **Production URL**: [https://butrift-frontend.onrender.com](https://butrift-frontend.onrender.com)
-- **Platform**: Render (Cloud hosting)
-- **Status**: Fully operational with backend API and frontend web application
-
-The deployed version includes all core features: user authentication, item listings, real-time messaging, transaction management, and review system. You can access the live application using the link above, or follow the setup instructions below to run it locally for development.
-
 ## 👥 Team Members
 
 - **Kenneth Chen (U01705999)** - Lead Testing Engineer
@@ -53,6 +43,17 @@ All team members have contributed to the codebase:
 
 
 All team members have actively contributed across frontend, backend, testing, database administration, and documentation, demonstrating collaborative development throughout the project lifecycle.
+
+## 🌐 Live Deployment
+
+The application is deployed and accessible online:
+
+- **Production URL**: [https://butrift-frontend.onrender.com](https://butrift-frontend.onrender.com)
+- **Platform**: Render (Cloud hosting)
+- **Status**: Fully operational with backend API and frontend web application
+- **Note**: The first page load may take approximately 1 minute as Render's free tier services spin down after inactivity and require a cold start to resume operation.
+
+The deployed version includes all core features: user authentication, item listings, real-time messaging, transaction management, and review system. You can access the live application using the link above, or follow the setup instructions below to run it locally for development.
 
 ## 🚀 Getting Started
 
