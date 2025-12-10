@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # BUThrift - Campus Marketplace
 
 > Boston University's trusted marketplace for sustainable student living
@@ -239,6 +240,10 @@ bu_trift/
 - **Real-time**: WebSocket (FastAPI native)
 
 ---
+
+## 🌐 Website
+
+- **Deployed to Render**: https://butrift-frontend.onrender.com
 
 **Course**: CS-411 Software Engineering  
 **Domain**: Sustainability  
