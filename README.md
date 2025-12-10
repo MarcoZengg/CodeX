@@ -84,13 +84,74 @@ cd ..
 
 ### 4. Configure Firebase
 
-1. Create a Firebase project at [Firebase Console](https://console.firebase.google.com/)
-2. Enable Authentication → Sign-in method → Email/Password
-3. Download service account key:
-   - Go to Project Settings → Service Accounts
-   - Click "Generate new private key"
-   - Save as `backend/firebase_service.json`
-4. Update `app/config/firebase.ts` with your Firebase web app configuration
+#### Step 4a: Create Firebase Project
+
+1. Go to [Firebase Console](https://console.firebase.google.com/)
+2. Click "Add project" or select an existing project
+3. Follow the setup wizard to create your project
+
+#### Step 4b: Enable Authentication
+
+1. In Firebase Console, go to **Authentication** → **Sign-in method**
+2. Enable **Email/Password** provider
+3. Click **Save**
+
+#### Step 4c: Get Firebase Web App Configuration
+
+1. In Firebase Console, go to **Project Settings** (gear icon)
+2. Scroll down to **Your apps** section
+3. Click the **Web** icon (`</>`) to add a web app
+4. Register your app (you can name it "BUThrift Web")
+5. Copy the Firebase configuration object that appears
+
+The configuration will look like this:
+```javascript
+const firebaseConfig = {
+  apiKey: "AIzaSy...",
+  authDomain: "your-project.firebaseapp.com",
+  projectId: "your-project-id",
+  storageBucket: "your-project.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abc123"
+};
+```
+
+#### Step 4d: Set Frontend Environment Variables
+
+1. Create a `.env` file in the project root (`Project/CodeX/bu_trift/.env`):
+   ```bash
+   cd Project/CodeX/bu_trift
+   touch .env
+   ```
+
+2. Open `.env` in a text editor and add your Firebase configuration values from the config object you copied:
+
+   Add the following variables with your Firebase configuration values:
+   ```bash
+   # Backend API URL
+   VITE_API_URL=http://localhost:8000
+   
+   # Firebase Configuration (get these from Firebase Console)
+   VITE_FIREBASE_API_KEY=your_api_key_from_firebase
+   VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+   VITE_FIREBASE_PROJECT_ID=your-project-id
+   VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+   VITE_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
+   VITE_FIREBASE_APP_ID=your_app_id
+   ``
+**Important Notes**: 
+- The `.env` file is **required** - the app will not work without it
+- The `.env` file is already in `.gitignore` and will not be committed to Git
+- **Never commit your `.env` file** - it contains sensitive credentials
+- If you see an error about missing environment variables, make sure you've created `.env` with all required variables
+
+#### Step 4e: Configure Backend Firebase Service Account
+
+1. In Firebase Console, go to **Project Settings** → **Service Accounts**
+2. Click **Generate new private key**
+3. Save the downloaded JSON file and save `firebase_service.json` file in `backend/` as `backend/firebase_service.json` 
+
+**Important**: The `firebase_service.json` file is already in `.gitignore` and should NOT be committed to Git.
 
 ### 5. Configure Cloudinary
 
